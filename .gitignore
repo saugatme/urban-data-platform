@@ -1,7 +1,5 @@
 data/
-__pycache__/
-*.pyc
-.ipynb_checkpoints/
-.vscode/
 .venv/
-reports/*.pdf  
+.env
+__pycache__/
+.ipynb_checkpoints/
