@@ -75,6 +75,5 @@ Expected output: `read back: 3` / `OK`.
 ## Team Workflow
 
 - Never commit to `main`. One branch per task: `git checkout -b task-N-name`
-- Commit early, push daily, merge via Pull Requests
 - `data/` and `.env` are gitignored — every teammate downloads datasets locally
 - Do not modify anything in `data/raw/` — the pipeline reads from it
