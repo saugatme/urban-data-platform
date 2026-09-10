@@ -4,7 +4,9 @@ A reusable Spark + Delta Lake data engineering platform that ingests heterogeneo
 urban datasets (taxi trips, weather, air quality, taxi zones), validates and
 standardizes them, and integrates them into a single analytical dataset.
 
+Built for the *Data-intensive Computing* course, Week 1: Build a Generic Urban Data Integration Platform.
 
+---
 
 ## Project Structure
 
@@ -19,22 +21,32 @@ urban-data-platform/
 │   ├── bronze/                     # Ingested as Delta, minimal changes (gitignored)
 │   ├── silver/                     # Cleaned, typed, standardized Delta tables (gitignored)
 │   ├── gold/                       # Integrated analytical Delta tables (gitignored)
+│   ├── benchmark/                  # Benchmark storage strategy outputs (gitignored)
 │   ├── metadata/                   # Ingestion log Delta table (gitignored)
 │   └── rejected/                   # Rejected rows with rejection_reason (gitignored)
 ├── src/
 │   ├── common/
 │   │   └── spark_session.py        # Shared Spark + Delta session builder (do not modify)
-│   └── ingestion/
-│       ├── config.py               # Dataset configs: paths, formats, PKs, rules
-│       ├── ingestor.py             # Generic ingestion pipeline (bronze layer)
-│       └── silver.py               # Common data model enforcement (silver layer)
+│   ├── ingestion/
+│   │   ├── config.py               # Dataset configs: paths, formats, PKs, rules
+│   │   ├── ingestor.py             # Generic ingestion pipeline (bronze layer)
+│   │   └── silver.py               # Common data model enforcement (silver layer)
+│   ├── integration/
+│   │   └── integrate.py            # Enrichment joins → gold/integrated_taxi_trips
+│   └── benchmark/
+│       └── benchmark.py            # Storage strategy comparison + query latency
 ├── docs/
 │   ├── data_catalog.md             # Task 1 deliverable
 │   ├── storage_architecture.md     # Task 2 deliverable
 │   ├── ingestion_framework.md      # Task 3 deliverable
-│   ├── common_data_model.md        # Task 4 deliverabl
-├── run_ingestion.py                # Entry point: runs bronze + silver pipeline
-├── inspect_bronze.py               # Utility: prints schema, null counts, ingestion log
+│   ├── common_data_model.md        # Task 4 deliverable
+│   ├── integration_pipeline.md     # Task 5 deliverable
+│   ├── benchmark_report.md         # Task 6 deliverable
+│   └── learning_guide_week1.md     # Concept explanations for the team
+├── run_ingestion.py                # Entry point: bronze + silver pipeline
+├── run_integration.py              # Entry point: gold integration pipeline
+├── run_benchmark.py                # Entry point: storage strategy benchmark
+├── inspect_bronze.py               # Utility: schema, null counts, ingestion log
 ├── notebooks/                      # Exploration and scratch work
 ├── requirements.txt
 └── .env                            # Local environment variables (gitignored)
@@ -42,7 +54,7 @@ urban-data-platform/
 
 ---
 
-## Setun)
+## Setup (new teammate — ~15 min)
 
 ### 1. Clone the repo
 
@@ -90,49 +102,75 @@ Run `notebooks/exploration.ipynb` top to bottom. Expected: Spark session starts 
 
 ## How to Run
 
-### Full pipeline (bronze + silver)
+Run these in order — each step depends on the previous.
+
+### 1. Bronze + Silver (ingestion + standardization)
 
 ```bash
 python run_ingestion.py
 ```
 
-Runs all four datasets through ingestion (bronze) and standardization (silver). Expect ~2 minutes total. Output goes to `data/bronze/`, `data/silver/`, `data/metadata/`, `data/rejected/`.
+Loads all four datasets, validates, standardizes, and saves as Delta tables in `data/bronze/` and `data/silver/`. Expect ~2 minutes.
 
-### Inspect results
+### 2. Gold (integration)
+
+```bash
+python run_integration.py
+```
+
+Enriches each taxi trip with weather, air quality, pickup zone, and dropoff zone. Output: `data/gold/integrated_taxi_trips`. Expect ~5 minutes.
+
+### 3. Benchmark
+
+```bash
+python run_benchmark.py
+```
+
+Compares two storage strategies (partitioned vs flat) for taxi trips. Measures ingestion time, storage size, file count, and query latency. Expect ~10 minutes.
+
+### Inspect bronze tables
 
 ```bash
 python inspect_bronze.py
 ```
 
-Prints schema, row counts, null counts per column, and the ingestion log for all bronze tables.
+Prints schema, row counts, null counts per column, and ingestion log for all bronze tables.
 
 ---
 
 ## What the Pipeline Does
 
 ```
-raw file → load → standardize columns → normalize timestamps
-        → validate (null PKs, duplicates) → apply business rules
-        → save as Delta (bronze) → log metadata
-        → apply common data model (silver)
+raw file
+  → load (CSV / Parquet)
+  → standardize columns (snake_case)
+  → normalize timestamps
+  → validate (null PKs, duplicates → rejected/)
+  → apply business rules
+  → save as Delta (bronze)
+  → apply common data model (silver)
+  → join weather + air quality + zones (gold)
 ```
 
-**Bronze layer** — raw data loaded into Delta with column renames (snake_case) and timestamp normalization. Invalid rows are isolated to `data/rejected/` rather than dropped silently.
+**Bronze** — raw data in Delta with column renames and timestamp normalization. Invalid rows isolated to `data/rejected/`.
 
-**Silver layer** — enforces the common data model: drops 100% null columns, fills measurement nulls with 0, fixes incorrectly typed columns, casts categorical IDs to `integer`.
+**Silver** — enforces the common data model: drops 100% null columns, fills measurement nulls, fixes incorrectly typed columns, casts categorical IDs to `integer`.
 
-**Ingestion log** — every run appends one row to `data/metadata/ingestion_log` recording processed/rejected/accepted row counts and execution time.
+**Gold** — each trip enriched with hourly weather, daily average PM2.5 from a fixed NYC monitoring site (Queens, site 124), pickup zone/borough, and dropoff zone/borough. All joins are left joins — no trips are lost.
+
+**Metadata** — every pipeline run appends to `data/metadata/ingestion_log` recording row counts and execution time.
 
 ---
 
 ## Dataset Summary
 
-| Dataset | Format | Rows (raw) | Rows (accepted) | Partitioned |
+| Dataset | Format | Raw Rows | Accepted Rows | Partitioned |
 |---|---|---|---|---|
 | Taxi Trips | Parquet | 9,554,778 | 8,480,870 | `year`, `month` |
 | Weather | CSV | 8,784 | 8,784 | None |
 | Air Quality | CSV | 8,139,551 | 8,139,551 | `year`, `month` |
 | Taxi Zones | CSV | 265 | 265 | None |
+| Integrated Trips (gold) | Delta | — | 8,480,870 | `year`, `month` |
 
 ---
 
