@@ -1,109 +1,76 @@
-# Storage Architecture Design
+# Task 2: Storage Architecture Design
 
-## 1. Layered lake layout
+## Directory Structure
 
-```javascript
-data/lake/
-├── bronze/            # typed, raw-ish; exactly what the file said, + provenance
+```
+data/
+├── raw/                  # Original files, never modified
 │   ├── taxi_trips/
 │   ├── weather/
 │   ├── air_quality/
 │   └── taxi_zones/
-├── silver/            # cleaned, common-data-model compliant
-├── gold/              # integrated / query-optimized outputs
-│   └── integrated_taxi_trips/
-└── quarantine/        # rejected rows + _quarantine_reason
-└── <dataset>
+├── bronze/               # Loaded into Delta, minimal changes
+│   ├── taxi_trips/
+│   ├── weather/
+│   ├── air_quality/
+│   └── taxi_zones/
+├── silver/               # Cleaned, typed, standardized
+│   ├── taxi_trips/
+│   ├── weather/
+│   ├── air_quality/
+│   └── taxi_zones/
+└── gold/                 # Integrated, query-ready
+    └── integrated_taxi_trips/
 ```
 
-Why Delta at every layer: ACID (a bad run never corrupts a table), schema
-enforcement on write (DQ gate), time travel (audit + reprocessing), and
-`MERGE` for idempotent re-ingestion.
+Each layer adds trust. Raw is immutable. Bronze is raw-as-Delta. Silver enforces the common data model. Gold is the analytical output.
 
-## 2. Lookup (dimension) tables
+---
 
-`taxi_zones` is the model lookup table: **265 rows, static, no temporal
-attribute**. Handling rules:
+## Naming Conventions
 
-- Stored once at `silver/taxi_zones/`; **never partitioned** — it is smaller
-  than one partition's worth of metadata overhead and is meant to be
-  broadcast-joined.
-- Re-ingestion is idempotent via `MERGE` on `location_id`.
-- Zone *names* never appear in fact tables — facts keep `pu_location_id` /
-  `do_location_id`; the borough dimension is resolved at query time or
-  materialized in gold. This avoids duplicating free-text `Zone` (up to
-  265 distinct values) across ~10M-row fact tables.
-- Known DQ issue: LocationID 265 has null Borough/Zone → integration must
-  left-join so those trips survive with null geography.
+- Snake_case for all table and column names: `taxi_trips`, `pickup_location_id`
+- Folder name = table name; no redundant prefixes within a layer
+- Gold tables named by analytical purpose: `integrated_taxi_trips`
 
-The same pattern applies to future small reference data (payment-type codes,
-rate codes).
+---
 
-## 3. Partitioning the fact tables
+## Partitioning Strategy
 
-**Guiding principle: partition by what you filter, not by what you store.**
+| Dataset | Partition Key | Rationale |
+|---|---|---|
+| Taxi Trips | `year`, `month` | 9.55M rows, grows continuously, queries filter by time period |
+| Air Quality | `year`, `month` | 8.14M rows, same query pattern |
+| Weather | None | 8,784 rows — partitioning adds overhead with no benefit |
+| Taxi Zone Lookup | None | 265 rows — lookup table, must never be partitioned |
+| Integrated Trips (gold) | `year`, `month` | Inherits taxi trip volume and query patterns |
 
-### taxi_trips (~3.2M rows/month)
-- **Partition by `pickup_date`** (derived, `date(pickup_ts)`), NOT by
-  `pu_location_id`.
-- Justification from the assignment queries:
-  - "trips per borough" → after the zone join, a borough filter is
-    `location_id IN (list)` — partition pruning on 265 location IDs is
-    ineffective (typical borough = 10–40 of 265 values → reads most files).
-  - "avg trip duration per day" → date range filter → `pickup_date`
-    pruning is perfect.
-  - "avg fare per borough" → same as #1.
-- Daily partitions for 3 months ≈ 91 partitions; at ~35k rows/partition this
-  is healthy. (Benchmark in Task 6 compares daily vs. monthly.)
+---
 
-### air_quality (8.1M rows, 925 sites)
-- **Partition by `date_local`**; do NOT partition by site — 925 site values ×
-  365 days would create ~340k tiny partitions (file-count explosion).
-- Site selection is a metadata filter (NY county) applied *before* the join,
-  not a partition key.
+## Design Decisions
 
-### weather (8,784 rows)
-- **Not partitioned at all.** One year of hourly data is a single
-  ~1 MB partition; partitioning adds a directory layer for zero pruning
-  benefit at this size.
+### Which datasets are lookup tables?
+**Taxi Zone Lookup** (265 rows) and **Weather** (8,784 rows) are lookup tables. Both are small, static, and always read in full during joins. Spark will broadcast them automatically — no partitioning needed or beneficial.
 
-## 4. When partitioning is harmful (general rules)
+### Which datasets should not be partitioned?
+Weather and Taxi Zone Lookup. Partitioning creates one subfolder per partition value. At this scale, the file metadata overhead exceeds any scan savings. Partitioning 265 rows would produce ~265 near-empty files.
 
-1. **Partition column cardinality too high** (> a few thousand values):
-   metadata overhead and small-file problem dominate (e.g., site ID in
-   air_quality, a UUID, or a timestamp finer than day/hour).
-2. **Partition column skewed**: 99% of rows in one partition → no pruning,
-   worse than unpartitioned for the hot partition.
-3. **Table smaller than ~1 GB**: pruning gain < metadata cost.
-4. **Partition column updated by MERGE**: writes fan out across many
-   directories; prefer ZORDER + Liquid clustering instead (Delta 3.x).
-5. **Low-selectivity filter column** (like borough with 7 values, 2 of which
-   cover 80% of data): ZORDER on that column beats partitioning.
+### Which datasets require different partitioning strategies?
+Taxi Trips and Air Quality are partitioned by `(year, month)` — large volumes with time-based query patterns. Weather and Taxi Zones are unpartitioned — small reference tables always read in full.
 
-## 5. 20× scale projection (≈200M trips / 60 months)
+### When does partitioning become harmful?
+- Table is too small (overhead > savings)
+- Partition key has too many distinct values → too many tiny files ("small files problem")
+- Queries never filter on the partition column → full scan regardless
+- Rule of thumb: only partition when each partition will exceed ~100MB
 
-- **Ingestion**: monthly Parquet files still fine; use `maxRecordsPerFile` /
-  `repartition(pickup_date)` on write to keep ~128–512 MB files per
-  partition directory. Delta `OPTIMIZE ... ZORDER BY (pu_location_id)` after
-  load, so borough queries skip data *within* retained files.
-- **Query latency**: daily partitioning at 20× = ~1,800 partitions — still
-  OK for Delta, but if file count degrades, switch to **monthly partitions
-  + ZORDER on pickup location** (the Task 6 benchmark gives us the measured
-  trade-off to cite).
-- **air_quality at 20×**: ~160M rows → still partition by date; consider
-  Liquid clustering (Delta 3.2) on (date, site) instead of Hive-style
-  partitioning.
-- **Metadata**: Delta transaction log per commit grows with file count, not
-  row count — file-count discipline (target-size writes, periodic OPTIMIZE)
-  matters more than row count at this scale.
-- **Integration**: hourly as-of join against weather/air_quality stays
-  cheap because those are small; the shuffle is bounded by the trip side,
-  which ZORDER + partitioning keep prunable.
+### If data volume increased 20×
 
-## 6. What the Task 6 benchmark must confirm
-
-| Question | Benchmark evidence |
+| Change | Reason |
 |---|---|
-| Is daily or monthly partitioning better? | Query latency + file count, both schemes |
-| Does borough query suffer from date partitioning? | "trips per borough" latency vs. ZORDER variant |
-| Cost of over-partitioning demo | file count, storage size per scheme |
+| Add `day` partition level to Taxi Trips and Air Quality | Monthly partitions become too large to scan efficiently |
+| Z-order on `pickup_location_id` within partitions | Data skipping for location queries without over-partitioning |
+| Z-order on `(state_code, county_code, site_num)` for Air Quality | Spatial filtering within time partitions |
+| `OPTIMIZE` + `VACUUM` scheduled regularly | Compact small files from incremental writes |
+| Cold partitions → cheaper object storage | Cost efficiency for rarely queried historical data |
+| Weather and Taxi Zones remain unpartitioned | They do not grow with trip volume |
