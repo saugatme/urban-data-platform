@@ -85,6 +85,7 @@ Examples:
 ### Air Quality
 - Dropped: `uncertainty`, `time_local`, `time_gmt`, `date_gmt`
 - `sample_measurement` nulls filled with `0.0`
+- `time_local` and `time_gmt` were dropped. This means hourly AQ joins are not possible — addressed in Task 5 by aggregating to daily average PM2.5.
 
 ### Taxi Zones
 - No changes required — already clean and correctly typed
