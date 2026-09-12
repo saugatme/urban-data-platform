@@ -15,11 +15,11 @@ All datetime values are stored as Spark `timestamp` type, representing `yyyy-MM-
 | Dataset | Raw Format | Standardized |
 |---|---|---|
 | Taxi Trips | `tpep_pickup_datetime` as string | `pickup_datetime` as `timestamp` |
-| Air Quality | `Date Local` as date string, `Time Local` as `HH:mm` string | `date_local` as `timestamp`; broken `time_local` dropped |
+| Air Quality | `Date Local` as date string, `Time Local` as `HH:mm` string | `date_local` plus `time_local` as `aq_timestamp` |
 | Weather | Separate `year`, `month`, `day`, `hour` integer columns | Kept as integers; combined at join time |
 | Taxi Zones | No temporal attributes | No change |
 
-**Fix applied:** In the air quality dataset, `time_local` and `time_gmt` were incorrectly cast to `timestamp` because they contain time-only strings (`HH:mm`). These columns were dropped in silver. The date columns (`date_local`) are sufficient for hourly joins.
+**Fix applied:** In the air quality dataset, `time_local` and `time_gmt` were incorrectly cast to `timestamp` because they contain time-only strings (`HH:mm`). Silver combines `date_local` and `time_local` into `aq_timestamp` for hourly joins.
 
 ---
 
@@ -85,7 +85,7 @@ Examples:
 ### Air Quality
 - Dropped: `uncertainty`, `time_local`, `time_gmt`, `date_gmt`
 - `sample_measurement` nulls filled with `0.0`
-- `time_local` and `time_gmt` were dropped. This means hourly AQ joins are not possible — addressed in Task 5 by aggregating to daily average PM2.5.
+- `aq_timestamp` is built from `date_local` and `time_local` for the hourly air-quality join.
 
 ### Taxi Zones
 - No changes required — already clean and correctly typed

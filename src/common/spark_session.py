@@ -3,7 +3,6 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# load .env (manual parser, no dependency)
 _env = PROJECT_ROOT / ".env"
 if _env.exists():
     for line in _env.read_text().splitlines():

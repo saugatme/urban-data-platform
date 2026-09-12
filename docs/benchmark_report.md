@@ -15,19 +15,19 @@ Both strategies are built from the same silver taxi trips table (8,480,870 rows)
 
 | Metric | Strategy A (year/month) | Strategy B (flat) |
 |---|---|---|
-| Ingestion time | 23.6s | 8.2s |
+| Ingestion time | 19.8s | 7.4s |
 | Storage size | 173.6 MB | 173.7 MB |
 | Parquet files | 15 | 9 |
-| Q1: trips per borough | 1.17s | 1.08s |
-| Q2: avg duration per day | 0.92s | 0.87s |
-| Q3: avg fare per borough | 0.99s | 0.93s |
+| Q1: trips per borough | 1.04s | 0.66s |
+| Q2: avg duration per day | 1.47s | 0.75s |
+| Q3: avg fare per borough | 1.21s | 1.16s |
 
 ---
 
 ## Discussion
 
 ### Ingestion Time
-Strategy A took 2.9× longer to ingest (23.6s vs 8.2s). Partitioning requires Spark to shuffle data by partition key before writing, then write each partition as a separate set of files. This shuffle cost is real even at Q1 2024 scale (3 months, 3 partitions).
+Strategy A took 2.7× longer to ingest (19.8s vs 7.4s). Partitioning requires Spark to shuffle data by partition key before writing, then write each partition as a separate set of files. This shuffle cost is real even at Q1 2024 scale (3 months, 3 partitions).
 
 ### Storage Size
 Storage size is virtually identical (173.6 MB vs 173.7 MB). Partitioning does not compress data — it only reorganizes it into subfolders. The same Parquet encoding applies regardless.
@@ -62,4 +62,4 @@ At 20× scale (12 months, 190M rows), Strategy A would win decisively on time-fi
 
 ## Conclusion
 
-For Q1 2024 data at current scale, flat storage (Strategy B) is marginally faster for full-scan analytical queries. Strategy A (partitioned) is the correct long-term design because the dataset grows continuously and future queries will filter by time period — but its benefit is not yet visible at 3-month scale. The 2.9× ingestion overhead of partitioning is the most significant measured difference.
+For Q1 2024 data at current scale, flat storage (Strategy B) is marginally faster for full-scan analytical queries. Strategy A (partitioned) is the correct long-term design because the dataset grows continuously and future queries will filter by time period — but its benefit is not yet visible at 3-month scale. The 2.7× ingestion overhead of partitioning is the most significant measured difference.

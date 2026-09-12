@@ -22,7 +22,6 @@ def get_spark():
         .config("spark.memory.fraction", "0.8")
         .config("spark.sql.files.maxPartitionBytes", "64m")
         .config("spark.default.parallelism", "8")
-        # auto-broadcast threshold: broadcast tables under 100MB
         .config("spark.sql.autoBroadcastJoinThreshold", "104857600")
     )
     return configure_spark_with_delta_pip(builder).getOrCreate()

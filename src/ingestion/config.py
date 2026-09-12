@@ -1,7 +1,6 @@
 from pyspark.sql import DataFrame
 from pyspark.sql.functions import col
 
-# ── dataset-specific rules ────────────────────────────────────────────────────
 
 def _rules_taxi_trips(df: DataFrame) -> DataFrame:
     return df.filter(
@@ -23,7 +22,6 @@ def _rules_taxi_zones(df: DataFrame) -> DataFrame:
     return df.filter(col("location_id").isNotNull())
 
 
-# ── column renames: original name → snake_case standard name ─────────────────
 
 COLUMN_RENAMES = {
     "taxi_trips": {
@@ -48,7 +46,6 @@ COLUMN_RENAMES = {
         "Airport_fee":         "airport_fee",
     },
     "weather": {
-        # already lowercase; kept for explicitness
         "year": "year", "month": "month", "day": "day", "hour": "hour",
         "temp": "temp", "dwpt": "dew_point", "rhum": "rel_humidity",
         "prcp": "precipitation", "wdir": "wind_direction",
@@ -90,13 +87,14 @@ COLUMN_RENAMES = {
 }
 
 
-# ── master config ─────────────────────────────────────────────────────────────
 
 DATASETS = {
     "taxi_trips": {
         "path":         "data/raw/taxi_trips/",
         "format":       "parquet",
         "primary_key":  None,           # no unique key exists
+        "required_columns": ["pickup_datetime", "dropoff_datetime", "trip_distance", "passenger_count",
+                             "fare_amount", "pickup_location_id", "dropoff_location_id"],
         "partition_by": ["year", "month"],
         "rules":        _rules_taxi_trips,
     },
@@ -104,6 +102,7 @@ DATASETS = {
         "path":         "data/raw/weather/weather.csv",
         "format":       "csv",
         "primary_key":  ["year", "month", "day", "hour"],
+        "required_columns": ["year", "month", "day", "hour", "temp"],
         "partition_by": None,
         "rules":        _rules_weather,
     },
@@ -112,6 +111,7 @@ DATASETS = {
         "format":       "csv",
         "primary_key":  ["state_code", "county_code", "site_num",
                          "parameter_code", "poc", "date_local", "time_local"],
+        "required_columns": ["state_code", "county_code", "site_num", "date_local", "time_local", "sample_measurement"],
         "partition_by": ["year", "month"],
         "rules":        _rules_air_quality,
     },
@@ -119,6 +119,7 @@ DATASETS = {
         "path":         "data/raw/taxi_zones/taxi_zone_lookup.csv",
         "format":       "csv",
         "primary_key":  ["location_id"],
+        "required_columns": ["location_id", "borough", "zone"],
         "partition_by": None,
         "rules":        _rules_taxi_zones,
     },

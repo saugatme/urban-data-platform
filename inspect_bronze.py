@@ -23,7 +23,6 @@ def inspect(spark, base="data"):
         if not any(v > 0 for v in null_counts.values()):
             print("  No nulls found")
 
-    # print metadata log
     print(f"\n{'='*50}")
     print("Ingestion log:")
     spark.read.format("delta").load(f"{base}/metadata/ingestion_log").show(truncate=False)

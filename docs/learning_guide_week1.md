@@ -263,10 +263,8 @@ Daylight saving time on March 31 2024 caused clocks to jump from 2:00am to 3:00a
 
 Fix: deduplicate weather on `weather_ts` before joining, keeping one row per hour.
 
-### Why is AQ daily instead of hourly?
-We dropped `time_local` in Task 4 because it was a `HH:mm` string that couldn't be cast to a timestamp. Without it, `date_local` has date only — no hour. So we can't match a trip at 14:00 to the 14:00 air quality reading.
-
-Solution: average all 24 hourly readings for the day into one `pm25_daily_avg` value, then join on date. Every trip on January 15 gets the same PM2.5 value. It's less precise but correct — no row multiplication.
+### How is AQ joined hourly?
+A time such as `14:00` is not a timestamp by itself. Silver combines it with `date_local` to create `aq_timestamp`. The pipeline groups duplicate readings for the selected site by hour, then joins that value to each trip's pickup hour.
 
 **Lesson:** decisions in earlier tasks have consequences downstream. Dropping `time_local` in Task 4 was the right call (it was broken), but we should document the downstream impact.
 
@@ -299,7 +297,7 @@ We compare two storage strategies for the same dataset to understand how storage
 
 ### What the results mean
 
-**Ingestion time (23.6s vs 8.2s):** Partitioning is 2.9× slower to write. Spark must shuffle all rows by partition key before writing, then write each partition separately. This is the real cost of partitioning — paid at write time, not read time.
+**Ingestion time (19.8s vs 7.4s):** Partitioning is 2.7× slower to write. Spark must shuffle all rows by partition key before writing, then write each partition separately. This is the real cost of partitioning — paid at write time, not read time.
 
 **Storage size (173.6 MB vs 173.7 MB):** Identical. Partitioning reorganizes data into folders but doesn't change how it's compressed. Same bytes, different folder structure.
 

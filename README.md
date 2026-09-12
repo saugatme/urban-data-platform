@@ -156,7 +156,7 @@ raw file
 
 **Silver** — enforces the common data model: drops 100% null columns, fills measurement nulls, fixes incorrectly typed columns, casts categorical IDs to `integer`.
 
-**Gold** — each trip enriched with hourly weather, daily average PM2.5 from a fixed NYC monitoring site (Queens, site 124), pickup zone/borough, and dropoff zone/borough. All joins are left joins — no trips are lost.
+**Gold** — each trip enriched with hourly weather, hourly PM2.5 from a fixed NYC monitoring site (Queens, site 124), pickup zone/borough, and dropoff zone/borough. All joins are left joins — no trips are lost.
 
 **Metadata** — every pipeline run appends to `data/metadata/ingestion_log` recording row counts and execution time.
 
