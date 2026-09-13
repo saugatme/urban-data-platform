@@ -2,5 +2,8 @@ data/
 .venv/
 .env
 __pycache__/
+notebooks\exploration.ipynb
 .ipynb_checkpoints/
 *.pdf
+setup_log.md
+learning_docs/

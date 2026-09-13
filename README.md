@@ -1,182 +1,63 @@
 # Urban Data Integration Platform
 
-A reusable Spark + Delta Lake data engineering platform that ingests heterogeneous
-urban datasets (taxi trips, weather, air quality, taxi zones), validates and
-standardizes them, and integrates them into a single analytical dataset.
+A Spark and Delta Lake platform for the Week 1 Urban Data Integration Platform assignment. It ingests taxi trips, weather, air quality, and taxi zones; validates and standardizes them; and creates one integrated Delta table.
 
-Built for the *Data-intensive Computing* course, Week 1: Build a Generic Urban Data Integration Platform.
+## Data layout
 
----
-
-## Project Structure
-
-```
-urban-data-platform/
-├── data/
-│   ├── raw/                        # Original files, NEVER modified (gitignored)
-│   │   ├── taxi_trips/             # yellow_tripdata_2024-01/02/03.parquet
-│   │   ├── weather/                # weather.csv
-│   │   ├── air_quality/            # hourly_88101_2024.csv
-│   │   └── taxi_zones/             # taxi_zone_lookup.csv
-│   ├── bronze/                     # Ingested as Delta, minimal changes (gitignored)
-│   ├── silver/                     # Cleaned, typed, standardized Delta tables (gitignored)
-│   ├── gold/                       # Integrated analytical Delta tables (gitignored)
-│   ├── benchmark/                  # Benchmark storage strategy outputs (gitignored)
-│   ├── metadata/                   # Ingestion log Delta table (gitignored)
-│   └── rejected/                   # Rejected rows with rejection_reason (gitignored)
-├── src/
-│   ├── common/
-│   │   └── spark_session.py        # Shared Spark + Delta session builder (do not modify)
-│   ├── ingestion/
-│   │   ├── config.py               # Dataset configs: paths, formats, PKs, rules
-│   │   ├── ingestor.py             # Generic ingestion pipeline (bronze layer)
-│   │   └── silver.py               # Common data model enforcement (silver layer)
-│   ├── integration/
-│   │   └── integrate.py            # Enrichment joins → gold/integrated_taxi_trips
-│   └── benchmark/
-│       └── benchmark.py            # Storage strategy comparison + query latency
-├── docs/
-│   ├── data_catalog.md             # Task 1 deliverable
-│   ├── storage_architecture.md     # Task 2 deliverable
-│   ├── ingestion_framework.md      # Task 3 deliverable
-│   ├── common_data_model.md        # Task 4 deliverable
-│   ├── integration_pipeline.md     # Task 5 deliverable
-│   ├── benchmark_report.md         # Task 6 deliverable
-│   └── learning_guide_week1.md     # Concept explanations for the team
-├── run_ingestion.py                # Entry point: bronze + silver pipeline
-├── run_integration.py              # Entry point: gold integration pipeline
-├── run_benchmark.py                # Entry point: storage strategy benchmark
-├── inspect_bronze.py               # Utility: schema, null counts, ingestion log
-├── notebooks/                      # Exploration and scratch work
-├── requirements.txt
-└── .env                            # Local environment variables (gitignored)
+```text
+data/raw/                 source files, unchanged
+data/bronze/              validated Delta tables
+data/silver/              common-model Delta tables
+data/gold/                integrated_taxi_trips
+data/rejected/            invalid rows with a reason
+data/metadata/            ingestion_log
+data/benchmark/           storage benchmark outputs
 ```
 
----
+Put the course datasets in these paths:
 
-## Setup (new teammate — ~15 min)
-
-### 1. Clone the repo
-
-```bash
-git clone https://github.com/saugatme/urban-data-platform.git
-cd urban-data-platform
+```text
+data/raw/taxi_trips/
+data/raw/weather/weather.csv
+data/raw/air_quality/hourly_88101_2024.csv
+data/raw/taxi_zones/taxi_zone_lookup.csv
 ```
 
-### 2. Python environment
+## Setup
 
-Python 3.11 or 3.12 only — **PySpark 3.5 does not support Python 3.13.**
+Use Python 3.11 or 3.12 and Java 17.
 
 ```bash
 uv venv --python 3.12
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # Linux / Mac / WSL
+.venv\Scripts\activate
 uv pip install -r requirements.txt
 ```
 
-### 3. Java 17
+On Windows, configure Hadoop helpers if required by your local Spark installation. Set `HADOOP_HOME`, `PYSPARK_PYTHON`, and `PYSPARK_DRIVER_PYTHON` in `.env`.
 
-Verify with `java -version`. If missing, install [Eclipse Temurin 17](https://adoptium.net).
+## Run
 
-### 4. Hadoop helpers (Windows only — skip on Linux/Mac/WSL)
-
-- Download `winutils.exe` and `hadoop.dll` from https://github.com/steveloughran/winutils (hadoop-3.0.0/bin)
-- Place both in `C:\hadoop\bin\`
-- Create `.env` in the project root:
-
-```
-HADOOP_HOME=C:\hadoop
-PYSPARK_PYTHON=python
-PYSPARK_DRIVER_PYTHON=python
-```
-
-### 5. Download datasets
-
-Download from the course page into `data/raw/` following the structure above.
-
-### 6. Verify setup
-
-Run `notebooks/exploration.ipynb` top to bottom. Expected: Spark session starts without errors.
-
----
-
-## How to Run
-
-Run these in order — each step depends on the previous.
-
-### 1. Bronze + Silver (ingestion + standardization)
+Run the stages in this order.
 
 ```bash
 python run_ingestion.py
-```
-
-Loads all four datasets, validates, standardizes, and saves as Delta tables in `data/bronze/` and `data/silver/`. Expect ~2 minutes.
-
-### 2. Gold (integration)
-
-```bash
 python run_integration.py
-```
-
-Enriches each taxi trip with weather, air quality, pickup zone, and dropoff zone. Output: `data/gold/integrated_taxi_trips`. Expect ~5 minutes.
-
-### 3. Benchmark
-
-```bash
 python run_benchmark.py
 ```
 
-Compares two storage strategies (partitioned vs flat) for taxi trips. Measures ingestion time, storage size, file count, and query latency. Expect ~10 minutes.
+`run_ingestion.py` writes bronze and silver tables. `run_integration.py` writes `data/gold/integrated_taxi_trips`. `run_benchmark.py` compares partitioned and flat taxi-trip storage. Use `python inspect_bronze.py` to inspect bronze tables and ingestion metadata.
 
-### Inspect bronze tables
+Latest run: 8,480,836 taxi trips were accepted; weather, air quality, and taxi zones had no rejected rows. The benchmark result is documented below.
 
-```bash
-python inspect_bronze.py
-```
+## Design
 
-Prints schema, row counts, null counts per column, and ingestion log for all bronze tables.
+- Names use `snake_case`.
+- The Spark session uses the `America/New_York` timezone for all timestamp handling.
+- Taxi trips, air quality, and integrated trips are partitioned by `year` and `month`.
+- Weather and taxi zones are not partitioned.
+- All contextual joins are left joins, so accepted taxi trips remain in the integrated table.
+- Dataset-specific details are in `src/ingestion/config.py`; the ingestion flow is shared.
 
----
+See `docs/architecture_diagram.md` for the architecture diagram, and `docs/t6_benchmark_report.md` for the completed benchmark report.
 
-## What the Pipeline Does
-
-```
-raw file
-  → load (CSV / Parquet)
-  → standardize columns (snake_case)
-  → normalize timestamps
-  → validate (null PKs, duplicates → rejected/)
-  → apply business rules
-  → save as Delta (bronze)
-  → apply common data model (silver)
-  → join weather + air quality + zones (gold)
-```
-
-**Bronze** — raw data in Delta with column renames and timestamp normalization. Invalid rows isolated to `data/rejected/`.
-
-**Silver** — enforces the common data model: drops 100% null columns, fills measurement nulls, fixes incorrectly typed columns, casts categorical IDs to `integer`.
-
-**Gold** — each trip enriched with hourly weather, hourly PM2.5 from a fixed NYC monitoring site (Queens, site 124), pickup zone/borough, and dropoff zone/borough. All joins are left joins — no trips are lost.
-
-**Metadata** — every pipeline run appends to `data/metadata/ingestion_log` recording row counts and execution time.
-
----
-
-## Dataset Summary
-
-| Dataset | Format | Raw Rows | Accepted Rows | Partitioned |
-|---|---|---|---|---|
-| Taxi Trips | Parquet | 9,554,778 | 8,480,870 | `year`, `month` |
-| Weather | CSV | 8,784 | 8,784 | None |
-| Air Quality | CSV | 8,139,551 | 8,139,551 | `year`, `month` |
-| Taxi Zones | CSV | 265 | 265 | None |
-| Integrated Trips (gold) | Delta | — | 8,480,870 | `year`, `month` |
-
----
-
-## Team Workflow
-
-- **Never commit to `main`** — one branch per task: `git checkout -b task-N-description`
-- `data/` and `.env` are gitignored — every teammate downloads datasets locally
-- **Do not modify** `data/raw/` or `src/common/spark_session.py`
-- Dataset-specific changes go in `src/ingestion/config.py` only — the pipeline itself stays generic
+- Documents relating to the task specifics and architecture design can be found in `docs/`

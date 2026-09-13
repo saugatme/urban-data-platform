@@ -17,6 +17,7 @@ def get_spark():
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
         .config("spark.ui.showConsoleProgress", "false")
         .config("spark.sql.shuffle.partitions", "8")
+        .config("spark.sql.session.timeZone", "America/New_York")
         .config("spark.driver.memory", "4g")
         .config("spark.executor.memory", "4g")
         .config("spark.memory.fraction", "0.8")

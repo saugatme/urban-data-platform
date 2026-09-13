@@ -12,19 +12,22 @@ if _env.exists():
             os.environ.setdefault(k.strip(), v.strip())
 
 _hadoop = os.environ.get("HADOOP_HOME")
-if _hadoop:  # Windows-only requirement; ignored on Linux/Mac/WSL
+if _hadoop:
     os.environ["PATH"] = os.environ["PATH"] + os.pathsep + str(Path(_hadoop) / "bin")
 
 
 def get_spark(app_name: str = "urban-data-platform"):
-    from pyspark.sql import SparkSession
     from delta import configure_spark_with_delta_pip
+    from pyspark.sql import SparkSession
 
-    builder = (SparkSession.builder
+    builder = (
+        SparkSession.builder
         .appName(app_name)
         .master("local[*]")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        .config("spark.sql.session.timeZone", "America/New_York")
+        .config("spark.sql.shuffle.partitions", "8")
         .config("spark.ui.showConsoleProgress", "false")
-        .config("spark.sql.shuffle.partitions", "8"))
+    )
     return configure_spark_with_delta_pip(builder).getOrCreate()

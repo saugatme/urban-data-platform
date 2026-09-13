@@ -1,4 +1,4 @@
-# Week 1 Architecture Diagram
+# Architecture Diagram
 
 ```mermaid
 flowchart LR
@@ -15,11 +15,10 @@ partitioned and flat copies]
 invalid rows and reasons]
     B --> G[Metadata Delta
 row counts and run time]
-    D --> H[Analysis and Week 2 queries]
+    D --> H[Analysis + Further Work]
 
     I[config.py
 paths, keys, rules] --> B
     I --> C
 ```
 
-Read left to right. Raw data is never changed. Each later layer is safer and easier to analyse. The configuration file supplies the dataset-specific details; the pipeline code supplies the reusable steps.

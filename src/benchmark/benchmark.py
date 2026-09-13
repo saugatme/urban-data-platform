@@ -1,5 +1,5 @@
 """
-Task 6 — Benchmark Two Storage Strategies for Taxi Trips
+Benchmark Two Storage Strategies for Taxi Trips
 
 Strategy A: Partitioned by (year, month)
 Strategy B: No partitioning (flat Delta table)
@@ -16,11 +16,13 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, avg, count, unix_timestamp
 
 
+# SETUP
 
 STRATEGY_A = "data/benchmark/strategy_a_partitioned"
 STRATEGY_B = "data/benchmark/strategy_b_flat"
 
 
+# INGESTION
 
 def ingest_strategy_a(spark: SparkSession) -> float:
     """Partitioned by year, month."""
@@ -43,6 +45,7 @@ def ingest_strategy_b(spark: SparkSession) -> float:
     return time.time() - t0
 
 
+# STORAGE METRICS
 
 def storage_metrics(path: str) -> dict:
     """Count files and total size in bytes under path."""
@@ -50,6 +53,7 @@ def storage_metrics(path: str) -> dict:
     total_files = 0
     parquet_files = 0
     for root, dirs, files in os.walk(path):
+        # skip _delta_log
         dirs[:] = [d for d in dirs if d != "_delta_log"]
         for f in files:
             if not f.startswith("."):
@@ -65,6 +69,7 @@ def storage_metrics(path: str) -> dict:
     }
 
 
+# QUERIES
 
 def query_trips_per_borough(spark: SparkSession, path: str) -> float:
     """Q1: Number of taxi trips per pickup borough."""
@@ -108,8 +113,10 @@ def query_avg_fare_per_borough(spark: SparkSession, path: str) -> float:
     return time.time() - t0
 
 
+# ── BENCHMARK RUNNER ──────────────────────────────────────────────────────────
 
 def benchmark_queries(spark: SparkSession, path: str, label: str) -> dict:
+    # run each query twice — first run warms up caches, second is the real measure
     print(f"\n  Warming up {label}...")
     query_trips_per_borough(spark, path)
     query_avg_duration_per_day(spark, path)
@@ -124,6 +131,7 @@ def benchmark_queries(spark: SparkSession, path: str, label: str) -> dict:
             "q3_avg_fare_per_borough": round(q3, 2)}
 
 
+# PRINT REPORT
 
 def print_report(results: dict):
     print("\n" + "="*60)
@@ -144,10 +152,12 @@ def print_report(results: dict):
     print("="*60)
 
 
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 
 def run_benchmark(spark: SparkSession):
     results = {}
 
+    # Strategy A
     print("\n>>> Strategy A: Partitioned by (year, month)")
     t_a = ingest_strategy_a(spark)
     print(f"  Ingestion: {t_a:.1f}s")
@@ -156,6 +166,7 @@ def run_benchmark(spark: SparkSession):
     q_a = benchmark_queries(spark, STRATEGY_A, "Strategy A")
     results["strategy_a"] = {"ingestion_s": round(t_a, 1), "storage": s_a, "queries": q_a}
 
+    # Strategy B
     print("\n>>> Strategy B: Flat (no partitioning)")
     t_b = ingest_strategy_b(spark)
     print(f"  Ingestion: {t_b:.1f}s")
