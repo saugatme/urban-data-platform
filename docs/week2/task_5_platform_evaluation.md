@@ -10,7 +10,22 @@
 | AQE               | 1.187 s  | 1.232 s   | -3.79%      | ✓ Identical |
 
 
-For per-query evidence across Q1–Q6, run `python run_week2_query_benchmark.py`. It executes the same query functions used by the notebook three times each and prints each timing, row count, and warm-run median. This keeps machine-specific timings reproducible rather than hard-coding a result from a different Spark host.
+## Analytical-query timing
+
+`python run_week2_query_benchmark.py` executed every analytical function three times. The table records the median of runs 2–3 after warm-up.
+
+| Query | Rows | Median |
+|---|---:|---:|
+| Q1 — monthly demand by zone | 760 | 1.532 s |
+| Q2 — weather and distance | 15 | 1.478 s |
+| Q3 — air quality and demand | 4 | 1.145 s |
+| Q4 — zone demand variance | 257 | 1.171 s |
+| Q5 — weekly peak hours | 7 | 2.238 s |
+| Q6 — monthly demand trend | 4 | 0.747 s |
+
+Q5 is slowest because it derives weekday/hour values for every trip before aggregating and ranking. Q1 follows because it creates 760 zone-month groups. Q4 uses a two-stage aggregation. Q6 is fastest because its window operates after a small monthly aggregation. The Q6 value was measured before the later, semantics-preserving `PARTITION BY year` correction; rerun the benchmark to record the final implementation's value.
+
+The Windows JAR-cleanup messages occurred after successful query completion during Spark shutdown. They are non-fatal and do not invalidate the timings or results.
 Methodology: median of runs 2–3 per experiment (run 1 excluded to avoid cold-start effects).
 
 Run context: Spark 3.5.9, Delta Lake 3.2.1, 8,480,836 integrated trips, and a 265-row taxi-zone lookup.
@@ -33,7 +48,7 @@ Broadcast join produced the largest improvement at **63.06%**, reducing executio
 
 ## Which queries remain computationally expensive?
 
-Q1 (monthly demand by zone) and Q4 (zone demand variance) remain the most expensive. Both require a full scan of 8.4M trip records followed by multi-level aggregation. Q4 uses a two-stage aggregation — first grouping by `(zone, condition_code)`, then computing `STDDEV` across groups — introducing a second shuffle. Caching helps on repeated runs but the first execution still pays the full I/O cost.
+Q5 (weekly peak hours) is the slowest measured analytical query at 2.238 s because it derives weekday/hour fields for every trip before aggregation and ranking. Q1 follows at 1.532 s because it scans the full table and produces 760 zone-month groups. Q4's two-stage aggregation — first by `(zone, condition_code)`, then `STDDEV` — makes it more expensive than its 257-row output suggests. Caching helps repeated workloads but cannot remove first-run I/O.
 
 ---
 

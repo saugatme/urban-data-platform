@@ -115,24 +115,28 @@ def q5_peak_hours(spark: SparkSession) -> DataFrame:
 def q6_monthly_trend(spark: SparkSession) -> DataFrame:
     return spark.sql("""
         WITH monthly AS (
-            SELECT month, COUNT(*) AS taxi_demand
+            SELECT year, month, COUNT(*) AS taxi_demand
             FROM trips
-            WHERE year = 2024
-            GROUP BY month
+            WHERE year >= 2024
+            GROUP BY year, month
         ),
         with_previous AS (
             SELECT
+                year,
                 month,
                 taxi_demand,
-                LAG(taxi_demand) OVER (ORDER BY month) AS previous_month_demand
+                LAG(taxi_demand) OVER (
+                    PARTITION BY year ORDER BY month
+                ) AS previous_month_demand
             FROM monthly
         )
         SELECT
+            year,
             month,
             taxi_demand,
             ROUND(100.0 * (taxi_demand - previous_month_demand) / previous_month_demand, 2) AS mom_change_pct
         FROM with_previous
-        ORDER BY month
+        ORDER BY year, month
     """)
 
 

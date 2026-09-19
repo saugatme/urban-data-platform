@@ -67,8 +67,11 @@ Benchmark timings depend on the machine, Spark configuration, and cached state. 
 - [Task 4 — Data products](task_4_data_products.md) — detailed reusable-product documentation
 - [Task 5 — Platform evaluation](task_5_platform_evaluation.md) — storage overhead and scaling recommendations
 
+## Submission documents
+
+- [Week 2 design report](design_report.md) and [LaTeX source](design_report.tex) — submission-ready report and editable source
+
 ## Source layout
-- [Week 2 design report](design_report.md) — the submission-ready 3–5 page report; its PDF copy is `week2_design_report.pdf`
 
 ```text
 src/analytics/constants.py       shared Week 2 paths and weather labels
@@ -87,5 +90,5 @@ docs/week2/task_5_platform_evaluation.md   Task 5 report
 
 - All timestamp handling uses the `America/New_York` Spark session timezone inherited from Week 1.
 - The optimization broadcast-join experiment intentionally joins the large trips table to the small canonical silver taxi-zone lookup.
-- Week 2 configures a process-local, user-writable Spark temporary directory to avoid the common Windows JAR-cleanup warning from `C:\Windows\Temp`.
+- Week 2 configures a process-local, user-writable Spark temporary directory. Windows can still log a non-fatal JAR-cleanup warning at Spark shutdown if a JAR remains locked; successful query output is unaffected.
 - Rerunning the data-products command overwrites only the Week 2 product tables; it does not change the Week 1 bronze, silver, or integrated Gold tables.

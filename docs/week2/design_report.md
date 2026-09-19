@@ -25,6 +25,19 @@ The notebook, `notebooks/week2_queries.ipynb`, provides interactive demonstratio
 
 ```powershell
 python run_week2_query_benchmark.py
+
+### Measured analytical-query timings
+
+The benchmark completed successfully on Spark 3.5.9 and Delta Lake 3.2.1. Values are the median of runs 2–3 after warm-up.
+
+| Query | Rows | Median |
+|---|---:|---:|
+| Q1 — monthly demand by zone | 760 | 1.532 s |
+| Q2 — weather and distance | 15 | 1.478 s |
+| Q3 — air quality and demand | 4 | 1.145 s |
+| Q4 — zone demand variance | 257 | 1.171 s |
+| Q5 — weekly peak hours | 7 | 2.238 s |
+| Q6 — monthly demand trend | 4 | 0.747 s |
 ```
 
 The first iteration is deliberately excluded because Spark session startup, Delta metadata loading, and file-system caching can make a cold run unrepresentative. The complete analytical design and output schemas are documented in [Tasks 1–2](task_1_2_analytical_queries.md).
@@ -63,10 +76,10 @@ Shared Week 2 paths, weather labels, and weather SQL mappings live in `src/analy
 
 The main performance trade-off is between refresh cost and query latency. The project does not cache every table permanently: caching is applied only in the repeated-workload experiment because storage pressure and stale cached data are real operational costs. Similarly, data products use batch overwrite because Week 2 is based on a fixed integrated dataset. For a continuous multi-city feed, incremental Delta `MERGE` refreshes and a `city` partition column would be preferable.
 
-Q1 and Q4 remain relatively expensive because they scan the full trip table and perform multi-level aggregations. Q4 adds a second shuffle to calculate standard deviation across weather-condition groups. Scaling to ten cities therefore requires partitioning by `city`, reviewing `spark.sql.shuffle.partitions`, clustering/Z-ordering frequently filtered columns, incremental product refresh, and execution on a distributed cluster rather than local mode. These conclusions are expanded in [Task 5](task_5_platform_evaluation.md).
+Q5 is the slowest measured query because it derives weekday/hour fields across the full trip table before aggregation and ranking. Q1 is the next slowest because it creates 760 zone-month groups; Q4 adds a second shuffle to calculate standard deviation across weather-condition groups. Scaling to ten cities therefore requires partitioning by `city`, reviewing `spark.sql.shuffle.partitions`, clustering/Z-ordering frequently filtered columns, incremental product refresh, and execution on a distributed cluster rather than local mode. These conclusions are expanded in [Task 5](task_5_platform_evaluation.md).
 
 ## 6. Reproducibility and submission contents
 
 From a fresh checkout, install the requirements, provide the course datasets locally, then run the Week 1 ingestion and integration commands before any Week 2 command. Create the analytical products with `python -m src.analytics.data_products`, execute optimisation evidence with `python -m src.analytics.optimization --evaluate`, and run six-query timing with `python run_week2_query_benchmark.py`. The root [README](../../README.md) contains the complete setup and execution order.
 
-The Week 2 submission includes the source code, the analytical notebook, four task reports, this 3–5 page design report, the benchmark methodology and results, and executable instructions. No Week 1 implementation has been changed as part of the Week 2 analytics work.
+The Week 2 submission includes the source code, analytical notebook, four task reports, this Markdown report, editable `design_report.tex`, benchmark methodology/results, and executable instructions. No Week 1 implementation has been changed as part of the Week 2 analytics work.

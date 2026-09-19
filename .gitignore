@@ -5,6 +5,5 @@ __pycache__/
 notebooks\exploration.ipynb
 .ipynb_checkpoints/
 *.pdf
-!docs/week2/week2_design_report.pdf
 setup_log.md
 learning_docs/

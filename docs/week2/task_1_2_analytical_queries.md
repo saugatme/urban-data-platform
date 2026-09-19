@@ -81,13 +81,13 @@ formatted as `HH:00` for readability.
 
 **Question:** How does taxi demand grow or shrink month to month through 2024?
 
-**Design:** Trips are aggregated by month for `year = 2024`. A `LAG()` window function
-retrieves the previous month's demand, and the percentage change is computed as
+**Design:** Trips are aggregated by year and month for `year >= 2024`. A `LAG()` window function
+partitioned by year retrieves the previous month's demand, and the percentage change is computed as
 `100 * (current - previous) / previous`. January returns NULL for `mom_change_pct`
-as there is no prior month.
+as there is no prior month in that year. Partitioning keeps trends from crossing years and avoids an unpartitioned-window warning.
 
 
-**Output columns:** `month`, `taxi_demand`, `mom_change_pct`
+**Output columns:** `year`, `month`, `taxi_demand`, `mom_change_pct`
 
 ---
 

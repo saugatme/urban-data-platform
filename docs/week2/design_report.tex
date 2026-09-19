@@ -1,0 +1,90 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\hypersetup{colorlinks=true,linkcolor=blue,urlcolor=blue}
+\setlist{nosep}
+
+\title{Urban Data Integration Platform\\\large Week 2 Design Report}
+\author{Data-intensive Computing}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Purpose and analytical requirements}
+Week 2 turns the Week 1 integrated Delta table, \texttt{data/gold/integrated\_taxi\_trips}, into a reusable analytics layer. The source contains 8,480,836 cleaned and enriched NYC taxi records. Week 2 is read-only with respect to this source and answers six stakeholder questions: monthly demand by pickup zone; trip distance by weather condition; demand by PM2.5 range; zone demand variance by weather; peak travel hour by weekday; and month-over-month demand change.
+
+The six analyses are reusable Spark SQL DataFrame functions in \texttt{src/analytics/queries.py}. They return DataFrames and are used by both the notebook and the command-line benchmark. Spark uses the Week 1 \texttt{America/New\_York} session timezone so weekday and hourly results reflect local operations.
+
+\section{Analytical query design and measured timings}
+Q1 aggregates by year, month, and pickup zone. Q2 normalises Meteostat condition codes before calculating average distance. Q3 buckets PM2.5 values and calculates demand and average distance. Q4 aggregates demand per zone/condition before calculating standard deviation. Q5 ranks hourly demand within each weekday. Q6 aggregates monthly demand and uses a \texttt{LAG} window partitioned by year, preventing trends from crossing a year boundary and avoiding Spark's unpartitioned-window warning.
+
+The benchmark command runs each function three times and reports the median of warm runs 2--3. The following results were captured locally with Spark 3.5.9 and Delta Lake 3.2.1; run 1 is excluded because it includes cold-start and metadata-loading effects.
+
+\begin{center}
+\small
+\begin{tabular}{lrr}
+\toprule
+Query & Rows & Warm-run median (s) \\
+\midrule
+Q1: monthly demand by zone & 760 & 1.532 \\
+Q2: weather and distance & 15 & 1.478 \\
+Q3: air quality and demand & 4 & 1.145 \\
+Q4: zone demand variance & 257 & 1.171 \\
+Q5: weekly peak hours & 7 & 2.238 \\
+Q6: monthly demand trend & 4 & 0.747 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Q5 is the slowest measured analytical query because it derives weekday/hour values for all trips, aggregates them, and ranks each weekday. Q1 is next because it groups the full dataset into 760 zone-month groups. Q4 has a two-stage aggregation and therefore remains more expensive than its small output size suggests. Q6 operates on a small monthly aggregate and is the fastest. The recorded Q6 timing predates the harmless window-partition correction; rerunning the benchmark records the final implementation's timing.
+
+\section{Reusable data products}
+\texttt{src/analytics/data\_products.py} automatically writes four Delta products beneath \texttt{data/gold/data\_products/}. Each product records \texttt{data\_source}, \texttt{creation\_time}, \texttt{refresh\_time}, and \texttt{schema\_version} metadata.
+
+\begin{center}
+\small
+\begin{tabular}{p{3.6cm}p{10cm}}
+\toprule
+Product & Decision value \\
+\midrule
+\texttt{daily\_mobility} & Daily zone demand, distance, revenue, and fare trends for transport planners. \\
+\texttt{taxi\_zone\_statistics} & Whole-period zone comparison for operations analysts. \\
+\texttt{weather\_impact} & Trip outcomes by temperature bucket and weather condition. \\
+\texttt{air\_quality\_impact} & Trip outcomes by PM2.5 category for policy analysis. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The four products total 1.25 MB, compared with the 1.19 GB integrated source (0.10\%). This small storage cost is justified by pre-computed aggregates. Batch overwrite is appropriate for the fixed Week 2 dataset; an ongoing multi-city feed should use incremental Delta \texttt{MERGE} refreshes.
+
+\section{Optimisation strategy and results}
+The project evaluates caching, partition filtering, broadcast joins, and Adaptive Query Execution (AQE). Every experiment checks that the baseline and optimised outputs are identical and prints \texttt{EXPLAIN FORMATTED} output as physical-plan evidence. Timings below are the median of warm runs 2--3.
+
+\begin{center}
+\small
+\begin{tabular}{p{4.2cm}rrl}
+\toprule
+Technique & Baseline & Optimised & Result \\
+\midrule
+Cache repeated aggregation & 1.070 s & 0.536 s & 49.91\% faster \\
+\texttt{year = 2024} partition filter & 0.861 s & 0.778 s & 9.64\% faster \\
+Broadcast taxi-zone lookup & 3.368 s & 1.244 s & 63.06\% faster \\
+AQE & 1.187 s & 1.232 s & 3.79\% slower \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Broadcast join is the strongest result: broadcasting the 265-row taxi-zone lookup avoids shuffling 8.48 million trips. Partition pruning is correctly visible in the plan but produces a modest improvement because most data is already in one year. AQE is not universally harmful; this local join was already broadcastable, leaving little runtime adaptation to offset AQE planning overhead.
+
+\section{Engineering decisions, scaling, and reproducibility}
+Shared paths and weather mappings live in \texttt{src/analytics/constants.py}, keeping query, product, and optimisation logic aligned. \texttt{src/analytics/runtime.py} directs temporary Spark artifacts to a user-writable path before Spark starts. Windows may still log a non-fatal JAR cleanup warning at shutdown when a JAR remains locked; the completed query results are unaffected.
+
+For ten cities, partition by \texttt{city}, review shuffle partition counts, cluster frequently filtered fields such as city/zone/year/month, use incremental product refreshes, and run on a distributed cluster rather than \texttt{local[*]}. Reproduce the evidence by running the Week 1 pipeline, then \texttt{python -m src.analytics.data\_products}, \texttt{python -m src.analytics.optimization --evaluate}, and \texttt{python run\_week2\_query\_benchmark.py}.
+
+\end{document}
