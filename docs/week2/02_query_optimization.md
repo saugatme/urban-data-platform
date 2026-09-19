@@ -9,15 +9,15 @@ Four Spark optimization techniques were evaluated against the integrated urban t
 3. Broadcast joins
 4. Adaptive Query Execution (AQE)
 
-Each optimization was compared against a baseline using median execution time across three runs. Results were verified for correctness using `subtract()`.
+Each optimization was compared against a baseline using the median of runs 2–3; run 1 was excluded to avoid cold-start effects. Results were verified by comparing the small aggregated result sets after sorting.
 
 ---
 
 ## Methodology
 
-- Median of 3 runs used to reduce startup/scheduling noise
+- Three runs per query; median of runs 2–3 used to reduce cold-start noise
 - `EXPLAIN FORMATTED` used to confirm physical plan changes
-- `df.subtract()` used to verify result correctness
+- Sorted result rows used to verify result correctness
 
 ---
 

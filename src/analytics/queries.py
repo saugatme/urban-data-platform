@@ -6,6 +6,8 @@ import time
 from pyspark.sql import DataFrame, SparkSession
 
 
+from src.analytics.constants import weather_condition_sql
+
 def register_trips(spark: SparkSession, base: str) -> None:
     trips = spark.read.format("delta").load(f"{base}/gold/integrated_taxi_trips")
     trips.createOrReplaceTempView("trips")
@@ -22,27 +24,9 @@ def q1_monthly_demand(spark: SparkSession) -> DataFrame:
 
 
 def q2_weather_distance(spark: SparkSession) -> DataFrame:
-    return spark.sql("""
+    return spark.sql(f"""
         SELECT
-            CASE condition_code
-                WHEN 1  THEN 'Clear'
-                WHEN 2  THEN 'Fair'
-                WHEN 3  THEN 'Cloudy'
-                WHEN 4  THEN 'Overcast'
-                WHEN 5  THEN 'Fog'
-                WHEN 6  THEN 'Freezing Fog'
-                WHEN 7  THEN 'Light Rain'
-                WHEN 8  THEN 'Rain'
-                WHEN 9  THEN 'Heavy Rain'
-                WHEN 10 THEN 'Freezing Rain'
-                WHEN 11 THEN 'Heavy Freezing Rain'
-                WHEN 12 THEN 'Sleet'
-                WHEN 13 THEN 'Heavy Sleet'
-                WHEN 14 THEN 'Light Snowfall'
-                WHEN 15 THEN 'Snowfall'
-                WHEN 16 THEN 'Heavy Snowfall'
-                ELSE 'Unknown'
-            END AS weather_condition,
+            {weather_condition_sql()} AS weather_condition,
             COUNT(*) AS trip_count,
             ROUND(AVG(trip_distance), 3) AS avg_trip_distance
         FROM trips

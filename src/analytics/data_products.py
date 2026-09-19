@@ -2,11 +2,16 @@
 
 from datetime import datetime
 from pyspark.sql import functions as F
+
+from src.analytics.constants import (
+    INTEGRATED_TRIPS_PATH,
+    PRODUCT_BASE_PATH,
+    weather_condition_column,
+)
 from src.common.spark_session import get_spark
+from src.analytics.runtime import configure_spark_temp_dir
 
 
-TRIPS_PATH = "data/gold/integrated_taxi_trips"
-PRODUCT_BASE = "data/gold/data_products"
 SCHEMA_VERSION = "1.0"
 
 
@@ -22,14 +27,16 @@ def add_metadata(df):
     )
 
 
-def write_product(df, name):
-    path = f"{PRODUCT_BASE}/{name}"
+def write_product(spark, df, name):
+    path = f"{PRODUCT_BASE_PATH}/{name}"
 
     (
         df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(path)
     )
 
-    print(f"{name}: {df.count()} rows -> {path}")
+    # Count the written product instead of recomputing its source aggregation.
+    row_count = spark.read.format("delta").load(path).count()
+    print(f"{name}: {row_count} rows -> {path}")
 
 
 def daily_mobility(trips):
@@ -77,25 +84,7 @@ def taxi_zone_statistics(trips):
 
 
 def weather_impact(trips):
-    weather_condition = (
-        F.when(F.col("condition_code") == 1, "Clear")
-        .when(F.col("condition_code") == 2, "Fair")
-        .when(F.col("condition_code") == 3, "Cloudy")
-        .when(F.col("condition_code") == 4, "Overcast")
-        .when(F.col("condition_code") == 5, "Fog")
-        .when(F.col("condition_code") == 6, "Freezing Fog")
-        .when(F.col("condition_code") == 7, "Light Rain")
-        .when(F.col("condition_code") == 8, "Rain")
-        .when(F.col("condition_code") == 9, "Heavy Rain")
-        .when(F.col("condition_code") == 10, "Freezing Rain")
-        .when(F.col("condition_code") == 11, "Heavy Freezing Rain")
-        .when(F.col("condition_code") == 12, "Sleet")
-        .when(F.col("condition_code") == 13, "Heavy Sleet")
-        .when(F.col("condition_code") == 14, "Light Snowfall")
-        .when(F.col("condition_code") == 15, "Snowfall")
-        .when(F.col("condition_code") == 16, "Heavy Snowfall")
-        .otherwise("Unknown")
-    )
+    weather_condition = weather_condition_column()
 
     temp_bucket = (
         F.when(F.col("temp") < 5, "Cold (<5°C)")
@@ -121,7 +110,7 @@ def weather_impact(trips):
             F.round(F.avg("temp"), 2).alias("avg_temperature"),
             F.round(F.avg("precipitation"), 3).alias("avg_precipitation"),
             F.round(F.avg("wind_speed"), 2).alias("avg_wind_speed"),
-            F.round(F.avg("trip_distance"), 3).alias("avg_distance_km"),
+            F.round(F.avg("trip_distance"), 3).alias("avg_distance_miles"),
             F.round(F.avg("total_amount"), 2).alias("avg_fare")
         )
     )
@@ -169,6 +158,7 @@ def air_quality_impact(trips):
 
 def main():
     spark = get_spark("data-products")
+    configure_spark_temp_dir()
     spark.sparkContext.setLogLevel("WARN")
 
     print(f"Spark ready: {spark.version}")
@@ -176,7 +166,7 @@ def main():
     trips = (
         spark.read
         .format("delta")
-        .load(TRIPS_PATH)
+        .load(INTEGRATED_TRIPS_PATH)
     )
 
     print(f"Integrated trips: {trips.count()}")
@@ -191,7 +181,7 @@ def main():
     for name, df in products.items():
         print(f"\n{name}")
         df.printSchema()
-        write_product(df, name)
+        write_product(spark, df, name)
 
     print("\nData products created successfully.")
 

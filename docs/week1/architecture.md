@@ -15,7 +15,7 @@ partitioned and flat copies]
 invalid rows and reasons]
     B --> G[Metadata Delta
 row counts and run time]
-    D --> H[Analysis + Further Work]
+    D --> H[Week 2 Analytics\nqueries, products, optimization]
 
     I[config.py
 paths, keys, rules] --> B
