@@ -25,10 +25,10 @@ Each optimization was compared against a baseline using the median of runs 2–3
 
 | Optimization      | Baseline | Optimized | Improvement | Correctness |
 |-------------------|----------|-----------|-------------|-------------|
-| Caching           | 1.002 s  | 0.517 s   | 48.40%      | ✓ Identical |
-| Partition Pruning | 0.830 s  | 0.795 s   | 4.22%       | ✓ Identical |
-| Broadcast Join    | 3.434 s  | 1.184 s   | 65.52%      | ✓ Identical |
-| AQE               | 0.999 s  | 0.896 s   | 10.31%      | ✓ Identical |
+| Caching           | 1.070 s  | 0.536 s   | 49.91%      | ✓ Identical |
+| Partition Pruning | 0.861 s  | 0.778 s   | 9.64%       | ✓ Identical |
+| Broadcast Join    | 3.368 s  | 1.244 s   | 63.06%      | ✓ Identical |
+| AQE               | 1.187 s  | 1.232 s   | -3.79%      | ✓ Identical |
 
 ---
 
@@ -87,8 +87,8 @@ The same join/aggregation query was run with `spark.sql.adaptive.enabled` set to
 
 ## Findings
 
-- **Broadcast join** produced the largest improvement (65.52%) — consistent with joining a large table against a 265-row lookup
-- **Caching** produced the second largest improvement (48.40%) — demonstrates the cost of repeated Delta file reads
-- **AQE** produced a moderate improvement (10.31%) — confirmed by `AdaptiveSparkPlan` in the physical plan
-- **Partition pruning** showed the smallest improvement (4.22%) — plan confirmed the filter was applied; limited gain reflects dataset size and Spark overhead
+- **Broadcast join** produced the largest improvement (63.06%) — consistent with joining a large table against a 265-row lookup
+- **Caching** produced the second largest improvement (49.91%) — demonstrates the cost of repeated Delta file reads
+- **Partition pruning** improved by 9.64%; the physical plan confirmed pruning on `year = 2024`, but the single-year dataset limits its potential benefit
+- **AQE** was 3.79% slower in this local run while preserving identical results; this small difference is normal timing variation because the broadcast join was already selected without AQE
 - All four optimizations preserved result correctness

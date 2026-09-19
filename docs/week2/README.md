@@ -36,7 +36,7 @@ The analytical-query demonstrations and their recorded output are in `notebooks/
 
 ### Analytical queries
 
-Six queries analyse taxi demand by zone and month, weather-related trip distance, PM2.5 demand patterns, demand variance by weather condition, peak travel hours, and month-over-month demand. See the [analytical-query report](01_analytical_queries.md) for each question, design, and output schema.
+Six queries analyse taxi demand by zone and month, weather-related trip distance, PM2.5 demand patterns, demand variance by weather condition, peak travel hours, and month-over-month demand. See the [Tasks 1–2 report](task_1_2_analytical_queries.md) for each question, design, and output schema.
 
 ### Reusable data products
 
@@ -57,9 +57,9 @@ Every product includes `data_source`, `creation_time`, `refresh_time`, and `sche
 
 Benchmark timings depend on the machine, Spark configuration, and cached state. Use the recorded reports as evidence for the assignment, not as universal performance guarantees:
 
-- [Query optimization](02_query_optimization.md) — implementation and physical-plan evidence
-- [Platform evaluation](04_platform_evaluation.md) — storage overhead and scaling recommendations
-- [Data products](03_data_products.md) — detailed reusable-product documentation
+- [Task 3 — Query optimization](task_3_query_optimization.md) — implementation and physical-plan evidence
+- [Task 4 — Data products](task_4_data_products.md) — detailed reusable-product documentation
+- [Task 5 — Platform evaluation](task_5_platform_evaluation.md) — storage overhead and scaling recommendations
 
 ## Source layout
 
@@ -70,10 +70,10 @@ src/analytics/queries.py         six analytical query functions
 src/analytics/data_products.py   materialised analytical products
 src/analytics/optimization.py    optimization experiments and evaluation
 notebooks/week2_queries.ipynb    interactive analysis and recorded evidence
-docs/week2/01_analytical_queries.md  Tasks 1–2 report
-docs/week2/02_query_optimization.md  Task 3 report
-docs/week2/03_data_products.md       Task 4 report
-docs/week2/04_platform_evaluation.md Task 5 report
+docs/week2/task_1_2_analytical_queries.md  Tasks 1–2 report
+docs/week2/task_3_query_optimization.md    Task 3 report
+docs/week2/task_4_data_products.md         Task 4 report
+docs/week2/task_5_platform_evaluation.md   Task 5 report
 ```
 
 ## Notes
