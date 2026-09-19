@@ -9,6 +9,8 @@
 | Broadcast Join    | 3.368 s  | 1.244 s   | 63.06%      | ✓ Identical |
 | AQE               | 1.187 s  | 1.232 s   | -3.79%      | ✓ Identical |
 
+
+For per-query evidence across Q1–Q6, run `python run_week2_query_benchmark.py`. It executes the same query functions used by the notebook three times each and prints each timing, row count, and warm-run median. This keeps machine-specific timings reproducible rather than hard-coding a result from a different Spark host.
 Methodology: median of runs 2–3 per experiment (run 1 excluded to avoid cold-start effects).
 
 Run context: Spark 3.5.9, Delta Lake 3.2.1, 8,480,836 integrated trips, and a 265-row taxi-zone lookup.

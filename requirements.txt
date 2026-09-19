@@ -2,4 +2,4 @@ pyspark==3.5.*
 delta-spark==3.2.*
 pandas
 pyyaml
-jupyter
+jupyterreportlab>=4.0

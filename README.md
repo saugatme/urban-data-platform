@@ -81,6 +81,7 @@ The first Spark run requires internet access so Delta can resolve its matching J
 Run the stages in this order.
 
 ```bash
+python run_week2_query_benchmark.py
 python run_ingestion.py
 python run_integration.py
 python run_benchmark.py
@@ -99,7 +100,8 @@ python -m src.analytics.data_products
 python -m src.analytics.optimization --evaluate
 ```
 
-The first command writes the reusable Delta products under `data/gold/data_products/`; the second evaluates caching, partition pruning, broadcast joins, AQE, and product-storage overhead.
+- [Week 2 design report](docs/week2/design_report.md) — submission-ready analytical design, trade-offs, and measured optimisation evidence
+The first command writes the reusable Delta products under `data/gold/data_products/`; the second evaluates caching, partition pruning, broadcast joins, AQE, and product-storage overhead. The third runs all six analytical-query functions three times and reports the median of the two warm runs.
 
 See [the Week 2 guide](docs/week2/README.md) for prerequisites, source layout, reports, and notebook usage.
 

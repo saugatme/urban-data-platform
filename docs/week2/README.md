@@ -30,6 +30,12 @@ Run the optimization experiments and include data-product storage overhead in th
 python -m src.analytics.optimization --evaluate
 ```
 
+Benchmark all six analytical-query functions with three runs each (the command reports the median of runs 2–3):
+
+```bash
+python run_week2_query_benchmark.py
+```
+
 The analytical-query demonstrations and their recorded output are in `notebooks/week2_queries.ipynb`. The query functions themselves are in `src/analytics/queries.py`; they return Spark DataFrames and do not modify the source table.
 
 ## Deliverables
@@ -62,6 +68,7 @@ Benchmark timings depend on the machine, Spark configuration, and cached state. 
 - [Task 5 — Platform evaluation](task_5_platform_evaluation.md) — storage overhead and scaling recommendations
 
 ## Source layout
+- [Week 2 design report](design_report.md) — the submission-ready 3–5 page report; its PDF copy is `week2_design_report.pdf`
 
 ```text
 src/analytics/constants.py       shared Week 2 paths and weather labels
