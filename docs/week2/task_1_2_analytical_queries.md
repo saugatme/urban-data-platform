@@ -1,98 +1,71 @@
-# Tasks 1 & 2 – Analytical Query Design and Implementation
+# Tasks 1 & 2 – Analytical Queries
 
 ## Dataset
 
-The integrated Delta table (`gold/integrated_taxi_trips`) combines NYC taxi trips with
-hourly weather (Meteostat condition codes, temperature, precipitation), hourly PM2.5 air
-quality readings, and the taxi zone lookup. It is partitioned by `year` and `month`.
-Key columns used across all queries: `pickup_datetime`, `pickup_location_id`,
-`pickup_zone`, `trip_distance`, `condition_code`, `pm25_hourly_avg`, `total_amount`.
+The source table (`gold/integrated_taxi_trips`) contains 8,480,836 NYC taxi trips joined with hourly weather, hourly PM2.5 air quality readings, and taxi zone names. It is partitioned by `year` and `month`. The main columns used are `pickup_datetime`, `pickup_location_id`, `pickup_zone`, `trip_distance`, `condition_code`, `pm25_hourly_avg`, and `total_amount`.
 
 ---
 
-## Q1 – Monthly Taxi Demand by Zone
+## Q1 – Monthly Demand by Zone
 
-**Question:** How many trips originate from each taxi zone each month?
+How many trips started from each zone each month?
 
-**Design:** Demand is measured as trip count (`COUNT(*)`), grouped by `year`, `month`,
-and `pickup_location_id` / `pickup_zone`. Filtered to `year > 2023` to exclude
-historical data outside the platform's operational window.
+Trips are counted and grouped by year, month, and zone. Filtered to `year > 2023`.
 
-**Output columns:** `year`, `month`, `pickup_location_id`, `pickup_zone`, `taxi_demand`
+Output: `year`, `month`, `pickup_location_id`, `pickup_zone`, `taxi_demand`
 
 ---
 
-## Q2 – Average Trip Distance by Weather Condition
+## Q2 – Trip Distance by Weather Condition
 
-**Question:** Do riders travel different distances under different weather conditions?
+Do people travel different distances depending on the weather?
 
-**Design:** Condition codes follow the Meteostat standard (1–16). Each code is mapped to
-a human-readable label via `CASE`. `AVG(trip_distance)` is computed per condition.
-Rows with `trip_distance = 0` are excluded as likely data errors.
+Weather codes (1–16) are mapped to readable names. Average trip distance is calculated per condition. Trips with zero distance are excluded.
 
-
-**Output columns:** `weather_condition`, `trip_count`, `avg_trip_distance`
+Output: `weather_condition`, `trip_count`, `avg_trip_distance`
 
 ---
 
-## Q3 – Air Quality (PM2.5) vs Taxi Demand
+## Q3 – Air Quality vs Demand
 
-**Question:** Does PM2.5 pollution level correlate with taxi trip volume or distance?
+Does air pollution affect how many trips are taken?
 
-**Design:** PM2.5 values are bucketed into five ranges (µg/m³): `0–10`, `10–20`,
-`20–30`, `30–50`, `50+`. These align roughly with EPA good/moderate/unhealthy
-thresholds while keeping ranges narrow enough to show gradients. Demand (`COUNT(*)`)
-and average distance are reported per bucket. NULL PM2.5 rows are excluded.
+PM2.5 values are grouped into five ranges: `0–10`, `10–20`, `20–30`, `30–50`, `50+`. Trip count and average distance are reported per range. Rows with no PM2.5 reading are excluded.
 
-
-**Output columns:** `pm25_range`, `taxi_demand`, `avg_trip_distance`
+Output: `pm25_range`, `taxi_demand`, `avg_trip_distance`
 
 ---
 
-## Q4 – Zones with Highest Demand Variance Across Weather Conditions
+## Q4 – Zone Demand Variance by Weather
 
-**Question:** Which zones show the most unstable demand when weather changes?
+Which zones have the most unstable demand when weather changes?
 
-**Design:** A CTE first aggregates trip count per `(pickup_zone, condition_code)` pair.
-The outer query then computes `STDDEV(demand)` per zone — a high standard deviation
-means demand swings significantly across weather types. `MIN`/`MAX`/`AVG` are included
-for context. Only zones with at least one recorded condition are included.
+Trips are first counted per zone per weather condition. Then the standard deviation of those counts is calculated per zone — a higher value means demand changes more depending on the weather.
 
-
-**Output columns:** `pickup_zone`, `demand_variation`, `min_demand`, `max_demand`, `avg_demand`
+Output: `pickup_zone`, `demand_variation`, `min_demand`, `max_demand`, `avg_demand`
 
 ---
 
-## Q5 – Peak Travel Hour per Day of the Week
+## Q5 – Peak Hour per Day of the Week
 
-**Question:** At what hour does each day of the week see the most taxi trips?
+What is the busiest hour for each day of the week?
 
-**Design:** Trips are grouped by `(day_of_week, hour_of_day)` using `DAYOFWEEK` and
-`HOUR`. A `ROW_NUMBER()` window function partitioned by `day_of_week` and ordered by
-`trip_count DESC` selects only the single busiest hour per day (`rn = 1`). The hour is
-formatted as `HH:00` for readability.
- 
+Trips are grouped by day and hour. The single busiest hour per day is selected using a ranking window function.
 
-**Output columns:** `day_name`, `peak_hour`, `trip_count`
+Output: `day_name`, `peak_hour`, `trip_count`
 
 ---
 
-## Q6 – Monthly Demand Trend (Month-over-Month)
+## Q6 – Monthly Demand Trend
 
-**Question:** How does taxi demand grow or shrink month to month through 2024?
+How does demand change month to month in 2024?
 
-**Design:** Trips are aggregated by year and month for `year >= 2024`. A `LAG()` window function
-partitioned by year retrieves the previous month's demand, and the percentage change is computed as
-`100 * (current - previous) / previous`. January returns NULL for `mom_change_pct`
-as there is no prior month in that year. Partitioning keeps trends from crossing years and avoids an unpartitioned-window warning.
+Trips are counted per month. Each month is compared to the previous one to calculate the percentage change. January has no prior month so its change is null. The window is partitioned by year to avoid crossing year boundaries.
 
-
-**Output columns:** `year`, `month`, `taxi_demand`, `mom_change_pct`
+Output: `year`, `month`, `taxi_demand`, `mom_change_pct`
 
 ---
 
-## Implementation Notes
+## Implementation
 
-All queries are implemented as functions in `src/analytics/queries.py`. Each function
-accepts a `SparkSession` and returns a `DataFrame`, operating on the `trips` temp view
-registered by `register_trips(spark, base)`. No query modifies the source data.
+All queries are functions in `src/analytics/queries.py`. Each takes a Spark session and returns a result table. They read from the `trips` view registered by `register_trips()`. None of them modify the source data.

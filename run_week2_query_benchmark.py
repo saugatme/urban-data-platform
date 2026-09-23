@@ -1,4 +1,4 @@
-"""Benchmark all six Week 2 analytical queries on the integrated Delta table."""
+"""Benchmark all six analytical queries on the integrated Delta table."""
 
 from statistics import median
 from time import perf_counter

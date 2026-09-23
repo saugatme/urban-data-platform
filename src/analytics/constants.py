@@ -1,4 +1,4 @@
-"""Shared definitions for Week 2 analytical modules."""
+"""Shared definitions for analytical modules."""
 
 from pyspark.sql import Column, functions as F
 

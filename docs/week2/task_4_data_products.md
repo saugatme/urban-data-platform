@@ -1,64 +1,78 @@
-# Task 4 – Reusable Analytical Data Products
+# Task 4 – Analytical Data Products
 
-Four data products were generated from the integrated taxi dataset and stored as Delta tables under `data/gold/data_products/`.
+Four summary tables were generated from the integrated trips dataset and saved under `data/gold/data_products/`.
 
 ---
 
-## Data Products
+## 1. Daily Mobility Summary
 
-### 1. Daily Mobility Summary
 **Path:** `data/gold/data_products/daily_mobility` — 19,793 rows
 
-Aggregates trip count, total distance, average distance, total revenue, and average fare per zone per day.
+Trip count, total distance, average distance, total revenue, and average fare per zone per day.
 
-**Who uses it:** City planners and transport operations teams monitoring daily demand patterns.  
-**Why materialise:** Aggregating 8.4M trips per query is expensive. Pre-computing daily summaries enables sub-second dashboard queries.
+**Who uses it:** Transport planners tracking daily demand by zone.
+
+**Why pre-compute it:** Counting and summing 8.4M trips on every query is slow. A pre-built daily summary makes those queries instant.
 
 ---
 
-### 2. Taxi Zone Statistics
+## 2. Taxi Zone Statistics
+
 **Path:** `data/gold/data_products/taxi_zone_statistics` — 258 rows
 
-Aggregates total trips, distance, and revenue per taxi zone across the full dataset.
+Total trips, distance, and revenue per zone across the full dataset.
 
-**Who uses it:** Fleet managers and zone-level operations teams identifying high- and low-demand zones.  
-**Why materialise:** A full table scan and aggregation across 8.4M rows to produce 258 summary rows is wasteful to repeat on every query.
+**Who uses it:** Fleet managers comparing zones.
+
+**Why pre-compute it:** Scanning 8.4M rows to produce 258 zone totals is wasteful to repeat every time.
 
 ---
 
-### 3. Weather Impact Summary
+## 3. Weather Impact Summary
+
 **Path:** `data/gold/data_products/weather_impact` — 25 rows
 
-Groups trips by temperature bucket (Cold/Mild/Hot) and Meteostat weather condition. Reports average distance, fare, temperature, precipitation, and wind speed per group.
+Average distance, fare, temperature, precipitation, and wind speed grouped by temperature range and weather condition.
 
-**Who uses it:** Data scientists and demand forecasters studying how weather affects travel behaviour.  
-**Why materialise:** Joining and bucketing all trips on weather columns on every query is expensive. This collapses it to a 25-row lookup.
+**Who uses it:** Analysts studying how weather affects travel.
+
+**Why pre-compute it:** Grouping all trips by weather on every query is expensive. This reduces it to a 25-row table.
 
 ---
 
-### 4. Air Quality Impact Summary
+## 4. Air Quality Impact Summary
+
 **Path:** `data/gold/data_products/air_quality_impact` — 3 rows
 
-Groups trips by EPA AQI category based on PM2.5 hourly averages. Reports total trips, average PM2.5, average distance, and average fare per category.
+Total trips, average PM2.5, average distance, and average fare grouped by air quality category.
 
-**Who uses it:** Public health researchers and environmental analysts studying the relationship between air quality and taxi demand.  
-**Why materialise:** PM2.5 filtering, bucketing, and aggregation across millions of rows is expensive to repeat. The NYC 2024 dataset produced 3 AQI categories (Good, Moderate, Unhealthy), reflecting that PM2.5 values stayed within the lower pollution bands throughout the year.
+**Who uses it:** Public health researchers looking at the link between air quality and taxi use.
+
+**Why pre-compute it:** Filtering and grouping millions of rows by PM2.5 on every query is expensive. The NYC 2024 data only reached three categories (Good, Moderate, Unhealthy) because pollution levels stayed low throughout the year.
 
 ---
 
 ## Metadata
 
-All four products include the following metadata columns:
+Each product stores four extra columns:
 
-| Column | Description |
+| Column | What it records |
 |---|---|
-| `data_source` | Source table (`integrated_taxi_trips`) |
-| `creation_time` | Timestamp when the product was generated |
-| `refresh_time` | Timestamp of the most recent refresh |
-| `schema_version` | Schema version (`1.0`) |
+| `data_source` | Where the data came from (`integrated_taxi_trips`) |
+| `creation_time` | When the product was first generated |
+| `refresh_time` | When it was last updated |
+| `schema_version` | Version number (`1.0`) |
 
 ---
 
 ## Storage
 
-Products are stored as Delta tables, supporting efficient querying, schema enforcement, and future incremental refresh via Delta `MERGE`.
+| Product               | Size      |
+|-----------------------|-----------|
+| Integrated trips      | 1.19 GB   |
+| daily_mobility        | 1.77 MB   |
+| taxi_zone_statistics  | 57.31 KB  |
+| weather_impact        | 22.55 KB  |
+| air_quality_impact    | 14.39 KB  |
+| **Total products**    | **1.87 MB** |
+| **Ratio**             | **0.15% of source** |

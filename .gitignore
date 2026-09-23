@@ -7,3 +7,4 @@ notebooks\exploration.ipynb
 *.pdf
 setup_log.md
 learning_docs/
+*.zip

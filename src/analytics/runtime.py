@@ -1,5 +1,5 @@
 """Runtime setup used only by the Week 2 Spark entry points."""
-
+# Only added as it we got right output but had lots of JAR related issue
 import os
 from pathlib import Path
 

@@ -1,94 +1,67 @@
-# Task 3 – Query Performance Optimization
+# Task 3 – Query Optimization
 
-## Objective
+## Setup
 
-Four Spark optimization techniques were evaluated against the integrated urban taxi dataset:
-
-1. Caching frequently accessed data
-2. Partition pruning
-3. Broadcast joins
-4. Adaptive Query Execution (AQE)
-
-Each optimization was compared against a baseline using the median of runs 2–3; run 1 was excluded to avoid cold-start effects. Results were verified by comparing the small aggregated result sets after sorting.
+Each experiment ran the same query three times. The first run was excluded because Spark does extra setup on the first execution. Times shown are the middle value of runs two and three. Both versions of each query were checked to confirm they returned the same results.
 
 ---
 
-## Methodology
+## Results
 
-- Three runs per query; median of runs 2–3 used to reduce cold-start noise
-- `EXPLAIN FORMATTED` used to confirm physical plan changes
-- Sorted result rows used to verify result correctness
-
----
-
-## Results Summary
-
-| Optimization      | Baseline | Optimized | Improvement | Correctness |
-|-------------------|----------|-----------|-------------|-------------|
-| Caching           | 1.070 s  | 0.536 s   | 49.91%      | ✓ Identical |
-| Partition Pruning | 0.861 s  | 0.778 s   | 9.64%       | ✓ Identical |
-| Broadcast Join    | 3.368 s  | 1.244 s   | 63.06%      | ✓ Identical |
-| AQE               | 1.187 s  | 1.232 s   | -3.79%      | ✓ Identical |
+| Technique         | Before   | After    | Change      | Results     |
+|-------------------|----------|----------|-------------|-------------|
+| Caching           | 0.776 s  | 0.459 s  | 40.85% faster | ✓ Identical |
+| Partition pruning | 0.706 s  | 0.567 s  | 19.69% faster | ✓ Identical |
+| Broadcast join    | 3.262 s  | 1.266 s  | 61.19% faster | ✓ Identical |
+| AQE               | 0.953 s  | 1.161 s  | 21.83% slower | ✓ Identical |
 
 ---
 
-## Physical Plan Evidence
+## Plan Evidence
 
-| Optimization      | Physical Plan Operator                        |
-|-------------------|-----------------------------------------------|
-| Caching           | `InMemoryRelation`, `InMemoryTableScan`        |
-| Partition Pruning | `PartitionFilters: [isnotnull(year), year = 2024]` |
-| Broadcast Join    | `BroadcastExchange`, `BroadcastHashJoin`      |
-| AQE               | `AdaptiveSparkPlan`                           |
-
----
-
-## Optimization 1 – Caching
-
-The 2024 subset of the Trips table was cached using `spark.sql(...).cache()`. Subsequent queries read from `InMemoryTableScan` instead of scanning Delta files.
-
-**Why appropriate:** The Trips table is the central dataset used by multiple queries. Caching avoids repeated file I/O when the same data is reused.
-
-**Trade-offs:** Cached data consumes executor memory and may be evicted under memory pressure. Most beneficial when data is accessed more than once.
+| Technique         | What appeared in the execution plan |
+|-------------------|--------------------------------------|
+| Caching           | `InMemoryRelation`, `InMemoryTableScan` |
+| Partition pruning | `PartitionFilters: [isnotnull(year), year = 2024]` |
+| Broadcast join    | `BroadcastExchange`, `BroadcastHashJoin` |
+| AQE               | `AdaptiveSparkPlan` |
 
 ---
 
-## Optimization 2 – Partition Pruning
+## Caching
 
-The optimized query added `WHERE year = 2024`. Since the table is partitioned by `year` and `month`, Spark skipped all other year partitions.
+The 2024 trips were saved in memory after the first read. Later queries read from memory instead of going back to disk each time.
 
-**Why appropriate:** Many analytical queries target a single year. Filtering on a partition column directly reduces the files Spark needs to read.
+**Why it helped:** Reading from memory is faster than reading from disk. Most queries use the same trips data, so keeping it in memory avoids repeated reads.
 
-**Note:** The 4.22% improvement was modest, but the physical plan confirmed `PartitionFilters: year = 2024` was applied. Benefit grows with dataset size and when more partitions are eliminated.
-
-**Trade-offs:** Only effective when filtering on partition columns. Over-partitioning can create many small files and increase overhead.
+**Trade-off:** Cached data uses memory. If the dataset is too large or only queried once, caching is not worth it.
 
 ---
 
-## Optimization 3 – Broadcast Join
+## Partition Pruning
 
-The taxi-zone lookup (265 rows) was broadcast to all executors using `/*+ BROADCAST(z) */`, avoiding a shuffle of the large Trips dataset.
+Adding `WHERE year = 2024` told Spark to only read the 2024 folder on disk instead of all years.
 
-**Why appropriate:** The Trips table is orders of magnitude larger than the zone lookup. Broadcasting the small table eliminates the need to shuffle Trips data across the network.
+**Why it helped:** The trips table is stored in separate folders by year and month. Filtering by year means Spark skips the other years entirely.
 
-**Trade-offs:** The broadcast table must fit in executor memory. Broadcasting a large table causes memory pressure or failures.
-
----
-
-## Optimization 4 – AQE
-
-The same join/aggregation query was run with `spark.sql.adaptive.enabled` set to `false` then `true`. AQE allowed Spark to adapt the physical plan at runtime based on actual data statistics.
-
-**Why appropriate:** The query involves joins, aggregations, and shuffles — all operations where runtime data characteristics can inform better execution decisions.
-
-**Trade-offs:** Introduces minor runtime planning overhead. Simple queries with no shuffles see little benefit.
+**Trade-off:** Only works when filtering on the columns used for folder organisation. The gain here was moderate because the dataset is mostly 2024 anyway.
 
 ---
 
-## Findings
+## Broadcast Join
 
-- **Broadcast join** produced the largest improvement (63.06%) — consistent with joining a large table against a 265-row lookup
-- **Caching** produced the second largest improvement (49.91%) — demonstrates the cost of repeated Delta file reads
-- **Partition pruning** improved by 9.64%; the physical plan confirmed pruning on `year = 2024`, but the single-year dataset limits its potential benefit
-- **AQE** was 3.79% slower in this local run while preserving identical results; this small difference is normal timing variation because the broadcast join was already selected without AQE
-- All four optimizations preserved result correctness
+The taxi-zone lookup (265 rows) was sent to every machine before the join, instead of moving the large trips data around.
+
+**Why it helped:** The trips table has 8.4 million rows. Moving that around to match zone records is expensive. Sending the 265-row lookup table to each machine instead is much cheaper.
+
+**Trade-off:** The small table has to fit in memory on each machine. A large table cannot be broadcast this way.
+
+---
+
+## AQE (Adaptive Query Execution)
+
+AQE lets Spark adjust its plan while a query is running. It was tested by running the same query with AQE off and then on.
+
+**Result:** AQE made the query 21.83% slower. The join was already using the most efficient approach before AQE was turned on. AQE had nothing to improve but still added its own overhead.
+
+**Trade-off:** AQE helps most when Spark has to decide between approaches at runtime. When the plan is already optimal, it adds cost instead.

@@ -1,20 +1,21 @@
 # Task 5 – Platform Evaluation
 
-## Benchmark Summary
+## Optimization Results
 
-| Optimization      | Baseline | Optimized | Improvement | Correctness |
-|-------------------|----------|-----------|-------------|-------------|
-| Caching           | 1.070 s  | 0.536 s   | 49.91%      | ✓ Identical |
-| Partition Pruning | 0.861 s  | 0.778 s   | 9.64%       | ✓ Identical |
-| Broadcast Join    | 3.368 s  | 1.244 s   | 63.06%      | ✓ Identical |
-| AQE               | 1.187 s  | 1.232 s   | -3.79%      | ✓ Identical |
+| Technique         | Before   | After    | Change        | Results     |
+|-------------------|----------|----------|---------------|-------------|
+| Caching           | 0.776 s  | 0.459 s  | 40.85% faster | ✓ Identical |
+| Partition pruning | 0.706 s  | 0.567 s  | 19.69% faster | ✓ Identical |
+| Broadcast join    | 3.262 s  | 1.266 s  | 61.19% faster | ✓ Identical |
+| AQE               | 0.953 s  | 1.161 s  | 21.83% slower | ✓ Identical |
 
+Run context: Spark 3.5.9, Delta Lake 3.2.1, 8,480,836 trips, 265-row zone lookup. Median of runs 2–3; run 1 excluded for cold-start.
 
-## Analytical-query timing
+---
 
-`python run_week2_query_benchmark.py` executed every analytical function three times. The table records the median of runs 2–3 after warm-up.
+## Query Timings
 
-| Query | Rows | Median |
+| Query | Rows | Time |
 |---|---:|---:|
 | Q1 — monthly demand by zone | 760 | 1.532 s |
 | Q2 — weather and distance | 15 | 1.478 s |
@@ -23,66 +24,55 @@
 | Q5 — weekly peak hours | 7 | 2.238 s |
 | Q6 — monthly demand trend | 4 | 0.747 s |
 
-Q5 is slowest because it derives weekday/hour values for every trip before aggregating and ranking. Q1 follows because it creates 760 zone-month groups. Q4 uses a two-stage aggregation. Q6 is fastest because its window operates after a small monthly aggregation. The Q6 value was measured before the later, semantics-preserving `PARTITION BY year` correction; rerun the benchmark to record the final implementation's value.
+---
 
-The Windows JAR-cleanup messages occurred after successful query completion during Spark shutdown. They are non-fatal and do not invalidate the timings or results.
-Methodology: median of runs 2–3 per experiment (run 1 excluded to avoid cold-start effects).
+## Which technique helped most?
 
-Run context: Spark 3.5.9, Delta Lake 3.2.1, 8,480,836 integrated trips, and a 265-row taxi-zone lookup.
+Broadcast join gave the biggest improvement at 61.19%. The zone lookup has only 265 rows against 8.4 million trips. Without broadcast, Spark moves trip data around to match zone records which is the expensive part. Sending the small lookup to each machine instead avoids all of that.
 
 ---
 
-## Which optimization produced the largest improvement?
+## Which technique had little or no effect?
 
-Broadcast join produced the largest improvement at **63.06%**, reducing execution time from 3.368 s to 1.244 s. The taxi-zone lookup contains only 265 rows against 8.48M trip records. Broadcasting the small lookup avoids shuffling the large Trips dataset. The physical plan confirmed `BroadcastExchange` and `BroadcastHashJoin` were used.
+AQE made the query 21.83% slower. The join was already using the most efficient approach before AQE was switched on. AQE had nothing to change but still added its own overhead on top.
 
----
-
-## Which optimization had little or no effect?
-
-**AQE was 3.79% slower in this run.** This is not a correctness issue: the results were identical. The join was already eligible for broadcast with AQE disabled, leaving little runtime adaptation for AQE to improve. At this local scale, the difference is within normal run-to-run timing variation.
-
-**Partition pruning improved by 9.64%.** The physical plan confirmed `PartitionFilters: year = 2024`. The dataset is primarily one year, so pruning eliminates relatively few partitions; the benefit would grow with additional years of data.
+Partition pruning improved by 19.69%. It worked correctly & the execution plan confirmed it only read 2024 data. The gain was moderate because almost all the data is already from 2024.
 
 ---
 
-## Which queries remain computationally expensive?
+## Which queries are still slow?
 
-Q5 (weekly peak hours) is the slowest measured analytical query at 2.238 s because it derives weekday/hour fields for every trip before aggregation and ranking. Q1 follows at 1.532 s because it scans the full table and produces 760 zone-month groups. Q4's two-stage aggregation — first by `(zone, condition_code)`, then `STDDEV` — makes it more expensive than its 257-row output suggests. Caching helps repeated workloads but cannot remove first-run I/O.
-
----
-
-## What characteristics of the data explain these results?
-
-- **Table size asymmetry** explains broadcast join's effectiveness — a 265-row lookup against 8.48M trips is an ideal broadcast candidate
-- **Single-year data coverage** limits partition pruning gains — `WHERE year = 2024` eliminates relatively few partitions
-- **An already-broadcastable join** limits AQE's opportunity to improve the plan in this local experiment
-- **Low PM2.5 variance** in NYC 2024 data explains why `air_quality_impact` produced only 3 AQI categories — values stayed within Good/Moderate/Unhealthy bands
+Q5 is the slowest at 2.238 s. It has to work out the day and hour for every single trip before it can count and rank them. Q1 takes 1.532 s because it scans all 8.4 million trips and produces 760 groups. Q4 groups the data twice, which also makes it slower than its small output suggests.
 
 ---
 
-## Storage Overhead of Analytical Data Products
+## Why did the results out this way?
 
-| Product               | Size       |
-|-----------------------|------------|
-| Integrated trips      | 1.19 GB    |
-| daily_mobility        | 1.18 MB    |
-| taxi_zone_statistics  | 38.55 KB   |
-| weather_impact        | 15.78 KB   |
-| air_quality_impact    | 9.85 KB    |
-| **Total products**    | **1.25 MB** |
-| **Product/source ratio** | **0.10%** |
-
-All four products together consume 0.10% of the source table size. The aggregation from 8.48M rows to tens or hundreds of summary rows results in negligible storage overhead while enabling sub-second access to pre-computed summaries.
+- The zone lookup is tiny (265 rows) compared to 8.4M trips, which is the situation where broadcast join helps most
+- Most data is from 2024 already, so partition pruning had little to skip
+- AQE slowed things down because the plan was already optimal before it was turned on
+- NYC air quality in 2024 stayed in the lower pollution bands, which is why the air quality product only has 3 rows
 
 ---
 
-## Scaling to Ten Cities
+## Storage
 
-| Recommendation | Reason |
-|---|---|
-| Add `city` as a partition column | Enables pruning across cities; without it every city query scans all data |
-| Increase `spark.sql.shuffle.partitions` | Default of 8 under-parallelises a 10x larger dataset |
-| Apply Delta Z-ordering on `(city, pickup_location_id, year, month)` | Co-locates frequently filtered columns on disk |
-| Switch to incremental Delta `MERGE` for product refresh | Full overwrite becomes expensive at scale |
-| Deploy on a real cluster (YARN/Kubernetes) | `local[*]` is limited to one machine |
+| Product               | Size      |
+|-----------------------|-----------|
+| Integrated trips      | 1.19 GB   |
+| daily_mobility        | 1.77 MB   |
+| taxi_zone_statistics  | 57.31 KB  |
+| weather_impact        | 22.55 KB  |
+| air_quality_impact    | 14.39 KB  |
+| **Total products**    | **1.87 MB** |
+
+All four products together use 0.15% of the space the source table takes up.
+
+---
+
+## If the platform expanded to ten cities
+
+- Add a `city` folder level so queries for one city don't read data from all others
+- Increase the number of parallel tasks Spark uses.
+- Group related data together on disk so less is read per query
+- Only process new records on each refresh instead of rewriting everything
