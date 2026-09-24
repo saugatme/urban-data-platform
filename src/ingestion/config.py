@@ -111,3 +111,11 @@ DATASETS = {
         "schema_version": "1.0",
     },
 }
+
+
+# Locations and formats for generated incremental releases.
+UPDATE_DATASETS = {
+    "taxi_trips": {"path": "data/updates/taxi_trips_update.parquet", "format": "parquet"},
+    "weather": {"path": "data/updates/weather_update.csv", "format": "csv"},
+    "air_quality": {"path": "data/updates/air_quality_update.csv", "format": "csv"},
+}
