@@ -40,6 +40,8 @@ data/raw/taxi_zones/taxi_zone_lookup.csv
 
 Use Python 3.11 or 3.12 and Java 17.
 
+Java 17 specifically: Spark 3.5 does not run reliably on Java 21. A trivial job such as `spark.range(5).count()` can succeed while real shuffle work fails with a `BlockManagerId` null-pointer error, so a minimal smoke test is not sufficient evidence that the runtime is supported. On a machine whose hostname resolves to a loopback address, also set `SPARK_LOCAL_IP=127.0.0.1`, or Spark may bind to a LAN address and fail to send its JARs.
+
 ```bash
 uv venv --python 3.12
 .venv\Scripts\activate
@@ -104,6 +106,23 @@ The first command writes the reusable Delta products under `data/gold/data_produ
 
 - [Week 2 design report](docs/week2/design_report.md) and [LaTeX source](docs/week2/design_report.tex) — analytical design, trade-offs, and measured evidence
 See [the Week 2 guide](docs/week2/README.md) for prerequisites, source layout, reports, and notebook usage.
+
+## Week 3 operations
+
+Week 3 takes the platform from a one-shot build to one that can receive a second data release, keep its products correct, and report on itself. It needs Weeks 1 and 2 to have run first.
+
+```bash
+python scripts/generate_incremental_updates.py
+python run_incremental_update.py
+python -m src.monitoring.queries
+python run_week3_evaluation.py
+```
+
+The first command synthesises a second release into `data/incoming/` by sampling and perturbing the existing data, adding `humidity` to weather and `aqi` to air quality as documented schema evolution. The second merges it into Bronze without a rebuild, then rebuilds Silver and Gold and refreshes the analytical products against their watermarks. The third answers the four monitoring questions from `data/monitoring/pipeline_log`. The fourth measures the five Week 3 overheads into `data/benchmark/week3_evaluation.json`.
+
+Running `run_incremental_update.py` twice is the idempotency check: the second run should insert 0 rows for every dataset.
+
+See the [Week 3 design report](docs/week3/design_report.md) and [evaluation report](docs/week3/evaluation_report.md).
 
 ## Design
 
