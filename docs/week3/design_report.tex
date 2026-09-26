@@ -1,0 +1,154 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\setlist{nosep}
+
+\title{Urban Data Integration Platform\\Operations and Maintenance Report}
+\author{Data-intensive Computing}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Purpose and scope}
+
+This report adds a second data release to the Urban Data Integration Platform.
+The work builds on the completed Bronze, Silver, Gold, and data-product layers.
+It does not modify the existing ingestion, integration, or analytical-product
+implementation. Instead, the small operations layer in
+\texttt{src/operations/pipeline.py} creates and applies a realistic release,
+records each operation, and refreshes the outputs affected by new data.
+
+The final release contains later taxi trips, later hourly weather observations,
+and later hourly air-quality observations. It also tests two compatible schema
+additions and duplicate handling. The workflow is reproducible through four
+scripts under \texttt{scripts/operations/}.
+
+\section{Incremental release and insertion}
+
+\subsection{Release design}
+
+The generator writes a separate release below \texttt{data/updates/}; the
+original source files in \texttt{data/raw/} remain unchanged. The final release contains 508,675 new taxi trips, 8,490 copied taxi duplicates, 168 weather rows with \texttt{humidity}, and 168 air-quality rows with \texttt{aqi}.
+
+
+Taxi records are sampled from valid source trips and shifted after the latest
+original timestamp while preserving trip duration. The 508,675 new trips are
+5.32\% of the 9,554,778-row taxi source, meeting the required 5--10\% range.
+The 8,490 unchanged copied trips are 1.64\% of the 517,165-row taxi release,
+meeting the required 1--2\% duplicate range. Weather and air quality each add
+one week of hourly data. Humidity is generated in the range 20--100; AQI is
+generated in the range 0--500.
+
+\subsection{Validation, duplicates, and schema evolution}
+
+The pipeline uses the existing common loading and standardisation helpers.
+Before writing, it checks required fields, original dataset validity rules,
+taxi-zone references, documented numeric ranges, duplicates, and unexpected
+columns. Rejected records receive a \texttt{rejection\_reason} and are written
+to \texttt{data/rejected/<dataset>/}; valid records continue through the
+pipeline.
+
+Weather and air quality have usable observation keys. Their rows are compared
+with existing keys only within the relevant year/month scope. Taxi has no
+stable trip identifier, so the pipeline calculates a SHA-256 hash over shared
+fields and uses an anti join to select rows absent from Bronze. This approach
+is insert-only: an unchanged Bronze record is never overwritten. Re-running
+the same release therefore inserts no additional records.
+
+Schema evolution is deliberately narrow. \texttt{humidity} for weather and
+\texttt{aqi} for air quality are explicitly allowed. Any other new column is
+reported and excluded, while a missing required column prevents unsafe input
+from being understood as a valid update.
+
+\section{Maintaining analytical consistency}
+
+The dependent flow is:
+
+\begin{verbatim}
+update -> Bronze append -> changed Silver/Gold tables -> affected products
+\end{verbatim}
+
+Only datasets with inserted rows are rebuilt. Product dependencies are kept in
+one visible map. Daily mobility and taxi-zone statistics depend on taxi trips;
+weather impact depends on taxi and weather; air-quality impact depends on taxi
+and air quality. The final release changed all three source datasets, so all
+four products refreshed.
+
+The product refresh is a full rebuild only when its dependencies change. This
+is an appropriate simple design because the products are whole-history
+aggregates, and it avoids work after an idempotent repeat. A later improvement
+would replace only affected month partitions in daily mobility. Using the two
+new schema fields in an analytical product would be a deliberate product
+change; existing products remain compatible because they select the columns
+they require.
+
+\section{Monitoring and rejected records}
+
+Every update, layer rebuild, and product refresh appends one compact record to
+the Delta table \texttt{data/monitoring/operations\_runs}. It stores timestamp,
+dataset, stage, processed/inserted/rejected counts, total and validation time,
+schema version, validation failures, and schema changes. The last two fields
+are JSON text, making new validation rules possible without changing the
+monitoring-table schema.
+
+The monitoring script runs four Spark SQL summaries: rejection totals by
+dataset, average execution time, rejected rows and reasons for each execution,
+and timing change between runs. The final run showed that taxi was the only
+dataset with rejected rows. All 8,490 rejections were the intentional
+\texttt{duplicate\_record} rows. Entries with zero processed rows represent
+valid rebuild or product-refresh stages rather than failed ingestion.
+
+\section{Evaluation}
+
+Taxi is the dominant operation because its release contains over half a million records. It processed 517,165 rows in 104.352 seconds, inserted 508,675, and rejected 8,490 duplicates; validation took 20.042 seconds. Weather inserted all 168 rows in 6.581 seconds with 0.751 seconds of validation. Air quality also inserted all 168 rows in 10.701 seconds with 0.881 seconds of validation.
+
+
+Storage after the final run was 1.63 GB in Bronze, 2.83 GB in Silver, and 2.47 GB in Gold. The update files used 23.73 MB, rejected records used 24.78 MB, and the monitoring table used only 93.91 KB.
+
+The result shows a reasonable operational trade-off. The release files and
+monitoring log are small compared with the maintained data layers. Retaining
+rejected rows consumes modest space but provides an auditable explanation for
+why records were not accepted. The major scalability limitation is taxi
+duplicate detection without a source ID. Stable trip identifiers and
+partition-aware refreshes would reduce future scans and full-product rebuilds.
+
+\section{Discussion and future direction}
+
+The design keeps the operations layer small by reusing the original loading,
+validation, Silver, Gold, and product functions. This means the first release
+and later releases use the same definition of a valid record. Insert-only
+processing protects Bronze history, while the duplicate check makes a repeated
+release safe. Weather and air quality can use their observation keys; taxi has
+no stable source identifier, so a SHA-256 hash of shared fields is a practical
+way to detect the copied duplicate rows. The final results support this choice:
+all 8,490 intentional taxi duplicates were isolated, while all valid weather
+and air-quality rows were inserted.
+
+The approach is deliberately simple rather than fully incremental everywhere.
+Only products affected by changed sources refresh, but an affected product is
+rebuilt in full because these are whole-history aggregates. This is easy to
+verify and appropriate for the current dataset. At a larger scale, stable taxi
+trip IDs and month-level product refreshes would reduce duplicate-comparison
+and recomputation cost. The monitoring table can also support future alerting
+when rejection rates or execution times exceed expected levels.
+\section{Reproducibility}
+
+From the project root, after the original pipeline has completed:
+
+\begin{verbatim}
+python scripts/operations/create_update_release.py
+python scripts/operations/run_pipeline.py
+python scripts/operations/show_monitoring.py
+python scripts/operations/evaluate.py
+\end{verbatim}
+
+The release summary is stored at \texttt{data/updates/summary.json}; measured
+results are stored at \texttt{data/benchmark/operations\_evaluation.json}.
+The accompanying documentation in \texttt{docs/week3/} explains each stage and
+its outputs.
+
+\end{document}
