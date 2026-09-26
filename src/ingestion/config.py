@@ -1,13 +1,6 @@
 from pyspark.sql.column import Column
 from pyspark.sql.functions import col
 
-from src.ingestion.validation import (
-    SchemaContract,
-    incomplete_record,
-    missing_reference,
-    value_out_of_range,
-)
-
 
 def _valid_taxi_trips() -> Column:
     return (
@@ -80,17 +73,6 @@ DATASETS = {
         "partition_by": ["year", "month"],
         "validity_condition": _valid_taxi_trips,
         "schema_version": "1.0",
-        "update_path": "data/incoming/taxi_trips/",
-        "schema_contract": SchemaContract(),
-        "validation_rules": [
-            incomplete_record([
-                "pickup_datetime", "dropoff_datetime", "trip_distance",
-                "passenger_count", "fare_amount",
-            ]),
-            missing_reference(
-                ["pickup_location_id", "dropoff_location_id"], "taxi_zone_ids"
-            ),
-        ],
     },
     "weather": {
         "path": "data/raw/weather/weather.csv",
@@ -101,13 +83,6 @@ DATASETS = {
         "partition_by": None,
         "validity_condition": _valid_weather,
         "schema_version": "1.0",
-        "update_path": "data/incoming/weather/weather_update.csv",
-        # Week 3 release 2 adds humidity; anything else is undocumented drift.
-        "schema_contract": SchemaContract(allowed_new=("humidity",)),
-        "validation_rules": [
-            value_out_of_range("humidity", 20, 100),
-            value_out_of_range("temp", -50, 60),
-        ],
     },
     "air_quality": {
         "path": "data/raw/air_quality/hourly_88101_2024.csv",
@@ -124,13 +99,6 @@ DATASETS = {
         "partition_by": ["year", "month"],
         "validity_condition": _valid_air_quality,
         "schema_version": "1.0",
-        "update_path": "data/incoming/air_quality/air_quality_update.csv",
-        # Week 3 release 2 adds aqi; anything else is undocumented drift.
-        "schema_contract": SchemaContract(allowed_new=("aqi",)),
-        "validation_rules": [
-            value_out_of_range("aqi", 0, 500),
-            value_out_of_range("sample_measurement", 0, 1000),
-        ],
     },
     "taxi_zones": {
         "path": "data/raw/taxi_zones/taxi_zone_lookup.csv",
@@ -141,17 +109,5 @@ DATASETS = {
         "partition_by": None,
         "validity_condition": _valid_taxi_zones,
         "schema_version": "1.0",
-        # The zone lookup is a fixed reference table; Week 3 ships no update for it.
-        "update_path": None,
-        "schema_contract": SchemaContract(),
-        "validation_rules": [incomplete_record(["location_id", "borough", "zone"])],
     },
-}
-
-
-# Locations and formats for generated incremental releases.
-UPDATE_DATASETS = {
-    "taxi_trips": {"path": "data/updates/taxi_trips_update.parquet", "format": "parquet"},
-    "weather": {"path": "data/updates/weather_update.csv", "format": "csv"},
-    "air_quality": {"path": "data/updates/air_quality_update.csv", "format": "csv"},
 }
