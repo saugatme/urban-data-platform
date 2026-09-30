@@ -1,4 +1,4 @@
-# Urban Data Integration Platform — Weeks 1 and 2
+# Urban Data Integration Platform — Weeks 1–4
 
 A Spark and Delta Lake platform for urban-data ingestion, integration, analytics, and performance evaluation. Week 1 builds the validated Bronze, Silver, and integrated Gold layers; Week 2 adds analytical queries, reusable Gold products, and Spark optimization experiments.
 
@@ -23,8 +23,12 @@ src/ingestion/    Week 1 ingestion and Silver transformations
 src/integration/  Week 1 Gold-table integration
 src/benchmark/    Week 1 storage benchmark
 src/analytics/    Week 2 queries, data products, and optimization
+src/ml/           Week 4 training-data, feature, and model pipelines
+scripts/ml/       Week 4 reproducible training and comparison entry points
 docs/week1/       Week 1 reports
 docs/week2/       Week 2 reports and run guide
+docs/week3/       Week 3 operations and maintenance reports
+docs/week4/       Week 4 machine learning reports and run guide
 ```
 
 Put the course datasets in these paths:
@@ -117,6 +121,18 @@ python scripts/operations/evaluate.py
 ```
 
 The workflow creates a controlled later release, appends only valid new records, isolates duplicate or invalid records, refreshes affected products, and stores monitoring and evaluation evidence. See the [operations guide](docs/week3/README.md), [design report](docs/week3/design_report.tex), and [evaluation report](docs/week3/evaluation_report.md).
+
+## Week 4 — Machine Learning Pipelines
+
+Week 4 uses the integrated Gold table to predict pickup-time trip duration with reusable Spark ML pipelines. From the project root:
+
+```powershell
+.venv\Scripts\Activate.ps1
+python scripts/ml/run_training.py --model both
+python scripts/ml/compare_workflows.py
+```
+
+The workflow writes a split Delta training dataset, fitted Linear Regression and Random Forest pipelines, metrics, and charts. See the [Week 4 — Machine Learning Pipelines guide](docs/week4/README.md) for the full run sequence, output locations, task documentation, design decisions, and evaluation results.
 ## Design
 
 - Names use `snake_case`.
@@ -130,4 +146,6 @@ The workflow creates a controlled later release, appends only valid new records,
 
 - [Week 1 documentation](docs/week1/README.md) — architecture, data model, ingestion, integration, and benchmarking
 - [Week 2 documentation](docs/week2/README.md) — analytics, data products, optimization, and evaluation
+- [Week 3 documentation](docs/week3/README.md) — incremental updates, operations, monitoring, and validation
+- [Week 4 documentation](docs/week4/README.md) — machine learning pipelines, model evaluation, and platform comparison
 - [Documentation index](docs/README.md) — complete documentation map
