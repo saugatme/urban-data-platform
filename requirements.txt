@@ -1,5 +1,8 @@
 pyspark==3.5.*
 delta-spark==3.2.*
 pandas
+matplotlib
 pyyaml
 jupyter
+# PySpark 3.5 imports the legacy distutils compatibility module on Python 3.12.
+setuptools<80
